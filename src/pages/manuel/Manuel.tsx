@@ -18,8 +18,27 @@ import TableauSuiviActions from "./TableauSuiviActions";
 import NoteSynthèse from "./NoteSynthèse";
 import CompteRenduMission from "./CompteRenduMission";
 import LivretAccueilClient from "./LivretAccueilClient";
-
+import GestionTemps from "./GestionTemps";
+import FichesFonction from "./FichesFonction";
+import FicheEntretien from "./FicheEntretien";
+import CompetencesCle from "./CompetencesCle";
+import QuestionnaireEcouteClient from "./QuestionnaireEcouteClient";
+import GestionDocumentation from "./GestionDocumentation";
 import * as XLSX from "xlsx";
+
+// ============================================================
+// Fonction utilitaire pour normaliser les chaînes
+// Accepte undefined/null et retourne une chaîne vide
+// ============================================================
+const normalizeTitle = (str: string | null | undefined): string => {
+  if (!str) return "";
+  return str
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .trim()
+    .replace(/[-\s]+/g, " ");
+};
 
 interface OutilManuel {
   id: number;
@@ -61,32 +80,52 @@ const Manuel: React.FC = () => {
 
   const selectedTool = outils.find((tool) => tool.id === selectedId);
 
-  const isPlanningTool = selectedTool?.titre === "OUTIL DE PLANIFICATION";
-  const isEcheancesSocialesTool =
-    selectedTool?.titre === "SUIVIE DES ECHEANCES SOCIALES";
-  const isAcceptationTool = selectedTool?.titre === "ACCEPTATION";
-  const isLabTool = selectedTool?.titre === "LUTTE ANTIBLANCHIMENT";
-  const isRepartitionTool =
-    selectedTool?.titre === "REPARTITION DES TACHES ENTRE LE CABINET";
-  const isLettresTool = selectedTool?.titre === "SUIVI DES LETTRE DE MISSION";
-  const isDemandeDocTool =
-    selectedTool?.titre === "DEMANDE DE DOCUMENT DU CLIENT";
-  const isTravauxPeriodiquesTool =
-    selectedTool?.titre === "TRAVAUX PERIODIQUES";
-  const isControlesEssentielsTool =
-    selectedTool?.titre === "CONTROLES ESSENTIELS";
-  const isBouclageDossierTool = selectedTool?.titre === "BOUCLAGE DE DOSSIER";
+  const isTool = (titreRef: string): boolean => {
+    if (!selectedTool) return false;
+    return normalizeTitle(selectedTool.titre) === normalizeTitle(titreRef);
+  };
+
+  const isPlanningTool = isTool("OUTIL DE PLANIFICATION");
+  const isEcheancesSocialesTool = isTool("SUIVIE DES ECHEANCES SOCIALES");
+  const isAcceptationTool = isTool("ACCEPTATION");
+  const isLabTool = isTool("LUTTE ANTIBLANCHIMENT");
+  const isRepartitionTool = isTool("REPARTITION DES TACHES ENTRE LE CABINET");
+  const isLettresTool = isTool("SUIVI DES LETTRE DE MISSION");
+  const isDemandeDocTool = isTool("DEMANDE DE DOCUMENT DU CLIENT");
+  const isTravauxPeriodiquesTool = isTool("TRAVAUX PERIODIQUES");
+  const isControlesEssentielsTool = isTool("CONTROLES ESSENTIELS");
+  const isBouclageDossierTool =
+    isTool("BOUCLAGE DE DOSSIER") || isTool("BOUCLAGE DU DOSSIER");
   const isLivretAccueilCollabTool =
-    selectedTool?.titre === "LIVRET D'ACCEUIL DU COLLABORATEUR";
+    isTool("LIVRET ACCUEIL COLLAB") ||
+    isTool("LIVRET D'ACCUEIL COLLAB") ||
+    isTool("LIVRET D'ACCEUIL DU COLLABORATEUR");
   const isObjectifsTool =
-    selectedTool?.titre === "MISE EN PLACE ET SUIVI DES OBJECTIFS";
-  const isNoteSyntheseTool = selectedTool?.titre === "NOTE DE SYNTHESE";
-  const isSuiviActionsTool =
-    selectedTool?.titre === "TABLEAU DE SUIVI DES ACTIONS";
+    isTool("MISE EN PLACE ET SUIVI DES OBJECTIFS") ||
+    isTool("MISE EN PLACE ET SUIVI DES OBJECTIF");
+  const isNoteSyntheseTool =
+    isTool("NOTE DE SYNTHESE") || isTool("NOTE DE SYNTHÈSE");
+  const isSuiviActionsTool = isTool("TABLEAU DE SUIVI DES ACTIONS");
   const isCompteRenduMissionTool =
-    selectedTool?.titre === "COMPTES RENDU DE MISSION";
-  const isLivretAccueilClientTool =
-    selectedTool?.titre === "LIVRET ACCUEIL DU CLIENT";
+    isTool("COMPTE RENDU DE MISSION") || isTool("COMPTES RENDU DE MISSION");
+  const isLivretAccueilClientTool = isTool("LIVRET ACCUEIL DU CLIENT");
+  const isFichesFonctionTool = isTool("FICHES DE FONCTION EXPERTISE");
+  const isCompetencesCleTool = isTool(
+    "TABLEAU D'IDENTIFICATION DES COMPETENCES CLES DU CABINET",
+  );
+  const isQuestionnaireEcouteClientTool =
+    isTool("QUESTIONNAIRE D'ECOUTE CLIENT") ||
+    isTool("QUESTIONNAIRE D'ÉCOUTE CLIENT");
+  const isFicheEntretienTool =
+    isTool("FICHE D'ENTRETIEN D'EVALUATION") ||
+    isTool("FICHE D'ENTRETIEN D'ÉVALUATION");
+  const isGestionDocumentationTool =
+    isTool("OUTIL DE GESTION DE LA DOCUMENTATION") ||
+    isTool("GESTION DE LA DOCUMENTATION");
+  const isGestionTemps =
+    isTool("GESTION TEMPS") ||
+    isTool("GESTION DES TEMPS") ||
+    isTool("GESTION DU TEMPS");
 
   const isCustomComponent =
     isPlanningTool ||
@@ -98,13 +137,19 @@ const Manuel: React.FC = () => {
     isDemandeDocTool ||
     isTravauxPeriodiquesTool ||
     isControlesEssentielsTool ||
+    isBouclageDossierTool ||
     isLivretAccueilCollabTool ||
     isObjectifsTool ||
     isSuiviActionsTool ||
     isNoteSyntheseTool ||
     isCompteRenduMissionTool ||
     isLivretAccueilClientTool ||
-    isBouclageDossierTool;
+    isFichesFonctionTool ||
+    isCompetencesCleTool ||
+    isFicheEntretienTool ||
+    isQuestionnaireEcouteClientTool ||
+    isGestionDocumentationTool ||
+    isGestionTemps;
 
   // Export du contenu HTML en Excel
   const exportContent = () => {
@@ -203,7 +248,10 @@ const Manuel: React.FC = () => {
           !isObjectifsTool &&
           !isSuiviActionsTool &&
           !isCompteRenduMissionTool &&
-          !isBouclageDossierTool && (
+          !isBouclageDossierTool &&
+          !isQuestionnaireEcouteClientTool &&
+          !isGestionDocumentationTool &&
+          !isGestionTemps && (
             <button
               onClick={exportContent}
               style={{
@@ -274,6 +322,12 @@ const Manuel: React.FC = () => {
               {isNoteSyntheseTool && <NoteSynthèse />}
               {isCompteRenduMissionTool && <CompteRenduMission />}
               {isLivretAccueilClientTool && <LivretAccueilClient />}
+              {isGestionTemps && <GestionTemps />}
+              {isFichesFonctionTool && <FichesFonction />}
+              {isCompetencesCleTool && <CompetencesCle />}
+              {isFicheEntretienTool && <FicheEntretien />}
+              {isQuestionnaireEcouteClientTool && <QuestionnaireEcouteClient />}
+              {isGestionDocumentationTool && <GestionDocumentation />}
               {!isCustomComponent && (
                 <div
                   dangerouslySetInnerHTML={{ __html: selectedTool.contenu }}

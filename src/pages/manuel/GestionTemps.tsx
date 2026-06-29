@@ -1,10 +1,10 @@
 // src/pages/manuel/GestionTemps.tsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import styled from "styled-components";
 import { supabase } from "../../lib/supabase";
 import * as XLSX from "xlsx";
 
-// ==================== STYLES (unifiés) ====================
+// ==================== STYLES (inchangés) ====================
 const Container = styled.div`
   background: #0f172a;
   border-radius: 16px;
@@ -186,6 +186,15 @@ const LoadingContainer = styled.div`
   color: #94a3b8;
 `;
 
+const ErrorContainer = styled.div`
+  background: #7f1d1d;
+  color: #fca5a5;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin: 12px 0;
+  border-left: 4px solid #dc2626;
+`;
+
 const FilterRow = styled.div`
   display: flex;
   gap: 20px;
@@ -247,6 +256,36 @@ const SummaryTable = styled.table`
   }
 `;
 
+const ImportArea = styled.div`
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 12px 0;
+  padding: 12px 16px;
+  background: #1e293b;
+  border-radius: 8px;
+  border: 2px dashed #334155;
+`;
+
+const FileInput = styled.input`
+  display: none;
+`;
+
+const ImportButton = styled(Button)`
+  background: #4facfe;
+  color: #fff;
+  &:hover {
+    background: #3b8edb;
+  }
+`;
+
+const FileName = styled.span`
+  color: #94a3b8;
+  font-size: 13px;
+  flex: 1;
+`;
+
 const MONTHS = [
   "Janvier",
   "Février",
@@ -272,7 +311,7 @@ interface Intervenant {
 
 interface Client {
   id: string;
-  nom: string;
+  name: string; // colonne 'name' en base
   code: string;
 }
 
@@ -286,7 +325,7 @@ interface Mission {
 interface TimeEntry {
   id: string;
   intervenant_id: string;
-  date: string; // ISO date
+  date: string;
   client_code: string;
   duree: number;
   mission_id: string;
@@ -296,22 +335,32 @@ interface TimeEntry {
   ca_facturable: number;
 }
 
+interface MonthData {
+  duree: number;
+  facturable: number;
+  nonFacturable: number;
+  ca: number;
+}
+
+interface SummaryItem {
+  label: string;
+  months: Record<number, MonthData>;
+  total: MonthData;
+}
+
 // ==================== COMPOSANT ====================
 const GestionTemps: React.FC = () => {
   const [activeTab, setActiveTab] = useState<
     "parametres" | "saisie" | "synthese"
   >("saisie");
 
-  // États des paramètres
   const [intervenants, setIntervenants] = useState<Intervenant[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [missions, setMissions] = useState<Mission[]>([]);
 
-  // États pour la saisie
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
   const [newEntry, setNewEntry] = useState<Partial<TimeEntry>>({});
 
-  // États pour les synthèses
   const [filterClient, setFilterClient] = useState<string>("");
   const [filterIntervenant, setFilterIntervenant] = useState<string>("");
   const [filterMission, setFilterMission] = useState<string>("");
@@ -320,13 +369,16 @@ const GestionTemps: React.FC = () => {
   const [saving, setSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Chargement des données
+  // Import
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const loadData = async () => {
     try {
       setLoading(true);
       const [intervRes, clientRes, missRes, entriesRes] = await Promise.all([
         supabase.from("intervenants").select("*").order("nom"),
-        supabase.from("clients").select("*").order("nom"),
+        supabase.from("clients").select("*").order("name"),
         supabase.from("missions").select("*").order("nom"),
         supabase
           .from("time_entries")
@@ -343,7 +395,7 @@ const GestionTemps: React.FC = () => {
       setTimeEntries(entriesRes.data || []);
     } catch (err: any) {
       console.error(err);
-      setError("Erreur chargement des données");
+      setError(err.message);
     } finally {
       setLoading(false);
     }
@@ -353,11 +405,11 @@ const GestionTemps: React.FC = () => {
     loadData();
   }, []);
 
-  // ===== Gestion des paramètres =====
-  // Ajouter un intervenant
+  // ===== PARAMÈTRES =====
   const addIntervenant = async (nom: string, niveau: string, taux: number) => {
     if (!nom || !niveau || taux <= 0) return;
     try {
+      setSaving(true);
       const { data, error } = await supabase
         .from("intervenants")
         .insert([{ nom, niveau, taux }])
@@ -366,50 +418,60 @@ const GestionTemps: React.FC = () => {
       if (error) throw error;
       setIntervenants([...intervenants, data]);
     } catch (err: any) {
-      alert("Erreur ajout intervenant: " + err.message);
+      setError(err.message);
+    } finally {
+      setSaving(false);
     }
   };
 
   const deleteIntervenant = async (id: string) => {
     if (!window.confirm("Supprimer cet intervenant ?")) return;
     try {
+      setSaving(true);
       await supabase.from("intervenants").delete().eq("id", id);
       setIntervenants(intervenants.filter((i) => i.id !== id));
     } catch (err: any) {
-      alert("Erreur suppression: " + err.message);
+      setError(err.message);
+    } finally {
+      setSaving(false);
     }
   };
 
-  // Ajouter un client
-  const addClient = async (nom: string, code: string) => {
-    if (!nom || !code) return;
+  const addClient = async (name: string, code: string) => {
+    if (!name || !code) return;
     try {
+      setSaving(true);
       const { data, error } = await supabase
         .from("clients")
-        .insert([{ nom, code }])
+        .insert([{ name, code }])
         .select()
         .single();
       if (error) throw error;
       setClients([...clients, data]);
     } catch (err: any) {
-      alert("Erreur ajout client: " + err.message);
+      setError(err.message);
+    } finally {
+      setSaving(false);
     }
   };
 
   const deleteClient = async (id: string) => {
     if (!window.confirm("Supprimer ce client ?")) return;
     try {
+      setSaving(true);
       await supabase.from("clients").delete().eq("id", id);
       setClients(clients.filter((c) => c.id !== id));
     } catch (err: any) {
-      alert("Erreur suppression: " + err.message);
+      setError(err.message);
+    } finally {
+      setSaving(false);
     }
   };
 
-  // Ajouter une mission
   const addMission = async (nom: string, code: string, tasks: string[]) => {
     if (!nom || !code) return;
     try {
+      setSaving(true);
       const { data, error } = await supabase
         .from("missions")
         .insert([{ nom, code, tasks }])
@@ -418,26 +480,30 @@ const GestionTemps: React.FC = () => {
       if (error) throw error;
       setMissions([...missions, data]);
     } catch (err: any) {
-      alert("Erreur ajout mission: " + err.message);
+      setError(err.message);
+    } finally {
+      setSaving(false);
     }
   };
 
   const deleteMission = async (id: string) => {
     if (!window.confirm("Supprimer cette mission ?")) return;
     try {
+      setSaving(true);
       await supabase.from("missions").delete().eq("id", id);
       setMissions(missions.filter((m) => m.id !== id));
     } catch (err: any) {
-      alert("Erreur suppression: " + err.message);
+      setError(err.message);
+    } finally {
+      setSaving(false);
     }
   };
 
-  // ===== Gestion des temps =====
+  // ===== SAISIE =====
   const handleEntryChange = (field: keyof TimeEntry, value: any) => {
     setNewEntry((prev) => ({ ...prev, [field]: value }));
   };
 
-  // Calcul du CA facturable (à l'ajout ou modification)
   const calculateCA = (entry: Partial<TimeEntry>): number => {
     if (entry.facturable === "NF") return 0;
     const intervenant = intervenants.find((i) => i.id === entry.intervenant_id);
@@ -446,7 +512,6 @@ const GestionTemps: React.FC = () => {
   };
 
   const addTimeEntry = async () => {
-    // Validation
     if (
       !newEntry.intervenant_id ||
       !newEntry.date ||
@@ -464,6 +529,7 @@ const GestionTemps: React.FC = () => {
       facturable: newEntry.facturable || "F",
     };
     try {
+      setSaving(true);
       const { data, error } = await supabase
         .from("time_entries")
         .insert([entryToInsert])
@@ -473,23 +539,176 @@ const GestionTemps: React.FC = () => {
       setTimeEntries([data, ...timeEntries]);
       setNewEntry({});
     } catch (err: any) {
-      alert("Erreur ajout ligne: " + err.message);
+      setError(err.message);
+    } finally {
+      setSaving(false);
     }
   };
 
   const deleteTimeEntry = async (id: string) => {
     if (!window.confirm("Supprimer cette ligne ?")) return;
     try {
+      setSaving(true);
       await supabase.from("time_entries").delete().eq("id", id);
       setTimeEntries(timeEntries.filter((e) => e.id !== id));
     } catch (err: any) {
-      alert("Erreur suppression: " + err.message);
+      setError(err.message);
+    } finally {
+      setSaving(false);
     }
   };
 
-  // ===== Synthèse =====
-  const getClientCode = (code: string) => code || "";
+  // ===== IMPORT =====
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    if (ext !== "xlsx" && ext !== "xls") {
+      alert("Veuillez sélectionner un fichier Excel (.xlsx ou .xls)");
+      return;
+    }
+    setImportFile(file);
+  };
 
+  const handleImport = async () => {
+    if (!importFile) {
+      alert("Veuillez sélectionner un fichier Excel.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const data = await importFile.arrayBuffer();
+      const workbook = XLSX.read(data, { type: "array" });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+
+      if (rows.length < 2) {
+        alert("Le fichier est vide ou ne contient que des en-têtes.");
+        return;
+      }
+
+      const header = rows[0] as string[];
+      const colMap: Record<string, number> = {};
+      header.forEach((col, idx) => {
+        const normalized = col.trim().toLowerCase();
+        if (normalized.includes("intervenant")) colMap.intervenant = idx;
+        else if (normalized.includes("date")) colMap.date = idx;
+        else if (normalized.includes("client")) colMap.client = idx;
+        else if (normalized.includes("durée") || normalized.includes("duree"))
+          colMap.duree = idx;
+        else if (normalized.includes("mission")) colMap.mission = idx;
+        else if (normalized.includes("tâche") || normalized.includes("tache"))
+          colMap.task = idx;
+        else if (normalized.includes("détail") || normalized.includes("detail"))
+          colMap.detail = idx;
+        else if (
+          normalized.includes("f/nf") ||
+          normalized.includes("facturable")
+        )
+          colMap.facturable = idx;
+      });
+
+      const required = ["intervenant", "date", "client", "duree"];
+      const missing = required.filter((r) => !(r in colMap));
+      if (missing.length > 0) {
+        alert(`Colonnes obligatoires manquantes : ${missing.join(", ")}`);
+        return;
+      }
+
+      // Mappings
+      const intervenantsMap: Record<string, string> = {};
+      intervenants.forEach((i) => (intervenantsMap[i.nom] = i.id));
+      const clientsMap: Record<string, string> = {};
+      clients.forEach((c) => (clientsMap[c.name] = c.code));
+      const missionsMap: Record<string, string> = {};
+      missions.forEach((m) => (missionsMap[m.nom] = m.id));
+
+      const newEntries: any[] = [];
+      let hasError = false;
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i] as any[];
+        if (!row || row.length === 0) continue;
+        const intervenantName =
+          row[colMap.intervenant]?.toString().trim() || "";
+        const dateStr = row[colMap.date]?.toString().trim() || "";
+        const clientName = row[colMap.client]?.toString().trim() || "";
+        const duree = parseFloat(row[colMap.duree]?.toString().trim()) || 0;
+        const missionName = row[colMap.mission]?.toString().trim() || "";
+        const task = row[colMap.task]?.toString().trim() || "";
+        const detail = row[colMap.detail]?.toString().trim() || "";
+        const facturable =
+          row[colMap.facturable]?.toString().trim().toUpperCase() || "F";
+
+        if (!intervenantName || !dateStr || !clientName || duree <= 0) continue;
+
+        const intervenantId = intervenantsMap[intervenantName];
+        const clientCode = clientsMap[clientName];
+        const missionId = missionsMap[missionName];
+        if (!intervenantId) {
+          alert(`Intervenant "${intervenantName}" inconnu`);
+          hasError = true;
+          break;
+        }
+        if (!clientCode) {
+          alert(`Client "${clientName}" inconnu`);
+          hasError = true;
+          break;
+        }
+        if (!missionId) {
+          alert(`Mission "${missionName}" inconnue`);
+          hasError = true;
+          break;
+        }
+
+        let dateObj = new Date(dateStr);
+        if (isNaN(dateObj.getTime())) {
+          const serial = parseFloat(dateStr);
+          if (!isNaN(serial)) {
+            dateObj = new Date((serial - 25569) * 86400 * 1000);
+          }
+        }
+        const dateISO = dateObj.toISOString().split("T")[0];
+        if (!dateISO) continue;
+
+        const facturableFlag = facturable === "NF" ? "NF" : "F";
+
+        newEntries.push({
+          intervenant_id: intervenantId,
+          date: dateISO,
+          client_code: clientCode,
+          duree: duree,
+          mission_id: missionId,
+          task: task,
+          detail: detail,
+          facturable: facturableFlag,
+          ca_facturable: 0, // sera recalculé après insertion (trigger ou à la main)
+        });
+      }
+
+      if (hasError || newEntries.length === 0) {
+        if (!hasError) alert("Aucune ligne valide à importer.");
+        return;
+      }
+
+      const { data: inserted, error } = await supabase
+        .from("time_entries")
+        .insert(newEntries)
+        .select();
+      if (error) throw error;
+
+      await loadData();
+      alert(`${inserted.length} lignes importées avec succès.`);
+      setImportFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    } catch (err: any) {
+      console.error(err);
+      alert("Erreur lors de l'import : " + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ===== SYNTHÈSE =====
   const getIntervenantName = (id: string) => {
     const i = intervenants.find((iv) => iv.id === id);
     return i ? i.nom : "";
@@ -500,7 +719,6 @@ const GestionTemps: React.FC = () => {
     return m ? m.nom : "";
   };
 
-  // Filtrer les entrées pour la synthèse
   const filteredEntries = timeEntries.filter((e) => {
     if (filterClient && e.client_code !== filterClient) return false;
     if (filterIntervenant && e.intervenant_id !== filterIntervenant)
@@ -509,14 +727,11 @@ const GestionTemps: React.FC = () => {
     return true;
   });
 
-  // Fonction pour générer les tableaux de synthèse par mois (pour un filtre donné)
   const buildMonthlySummary = (
     entries: TimeEntry[],
     groupBy: "client" | "intervenant" | "client_intervenant",
-  ) => {
-    // On regroupe par mois (1-12) et éventuellement par client/intervenant
-    const months = Array.from({ length: 12 }, (_, i) => i + 1);
-    const result: any = {};
+  ): SummaryItem[] => {
+    const map: Record<string, SummaryItem> = {};
 
     entries.forEach((e) => {
       const month = new Date(e.date).getMonth() + 1;
@@ -526,8 +741,8 @@ const GestionTemps: React.FC = () => {
           : groupBy === "intervenant"
             ? e.intervenant_id
             : `${e.client_code}_${e.intervenant_id}`;
-      if (!result[key]) {
-        result[key] = {
+      if (!map[key]) {
+        map[key] = {
           label:
             groupBy === "client"
               ? e.client_code
@@ -538,15 +753,15 @@ const GestionTemps: React.FC = () => {
           total: { duree: 0, facturable: 0, nonFacturable: 0, ca: 0 },
         };
       }
-      if (!result[key].months[month]) {
-        result[key].months[month] = {
+      if (!map[key].months[month]) {
+        map[key].months[month] = {
           duree: 0,
           facturable: 0,
           nonFacturable: 0,
           ca: 0,
         };
       }
-      const m = result[key].months[month];
+      const m = map[key].months[month];
       m.duree += e.duree;
       if (e.facturable === "F") {
         m.facturable += e.duree;
@@ -554,34 +769,17 @@ const GestionTemps: React.FC = () => {
       } else {
         m.nonFacturable += e.duree;
       }
-      result[key].total.duree += e.duree;
-      result[key].total.facturable += e.facturable === "F" ? e.duree : 0;
-      result[key].total.nonFacturable += e.facturable === "NF" ? e.duree : 0;
-      result[key].total.ca += e.ca_facturable || 0;
+      map[key].total.duree += e.duree;
+      map[key].total.facturable += e.facturable === "F" ? e.duree : 0;
+      map[key].total.nonFacturable += e.facturable === "NF" ? e.duree : 0;
+      map[key].total.ca += e.ca_facturable || 0;
     });
 
-    // Transformer en tableau pour affichage
-    const rows: any[] = [];
-    Object.keys(result).forEach((key) => {
-      const item = result[key];
-      const row = { label: item.label, months: {} };
-      months.forEach((m) => {
-        row.months[m] = item.months[m] || {
-          duree: 0,
-          facturable: 0,
-          nonFacturable: 0,
-          ca: 0,
-        };
-      });
-      row.total = item.total;
-      rows.push(row);
-    });
-    return rows;
+    return Object.values(map);
   };
 
-  // Synthèse par type de mission
   const getMissionSummary = (entries: TimeEntry[]) => {
-    const missionMap: { [key: string]: { ca: number } } = {};
+    const missionMap: Record<string, { ca: number }> = {};
     entries.forEach((e) => {
       const missionName = getMissionName(e.mission_id) || "Non défini";
       if (!missionMap[missionName]) missionMap[missionName] = { ca: 0 };
@@ -593,11 +791,10 @@ const GestionTemps: React.FC = () => {
     }));
   };
 
-  // ===== Export Excel =====
+  // ===== EXPORT =====
   const exportExcel = () => {
     const wb = XLSX.utils.book_new();
 
-    // Feuille Saisie
     const rows: any[] = [
       ["Gestion des temps - Saisie"],
       [],
@@ -629,8 +826,6 @@ const GestionTemps: React.FC = () => {
     const ws = XLSX.utils.aoa_to_sheet(rows);
     XLSX.utils.book_append_sheet(wb, ws, "Saisie");
 
-    // Synthèse par client (avec filtres appliqués)
-    // ... etc (on peut ajouter d'autres feuilles)
     const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
     const blob = new Blob([wbout], { type: "application/octet-stream" });
     const link = document.createElement("a");
@@ -642,7 +837,7 @@ const GestionTemps: React.FC = () => {
     URL.revokeObjectURL(link.href);
   };
 
-  // ===== Rendu =====
+  // ===== RENDU =====
   if (loading) {
     return (
       <LoadingContainer>
@@ -670,6 +865,12 @@ const GestionTemps: React.FC = () => {
         l'intervenant.
       </Description>
 
+      {error && (
+        <ErrorContainer>
+          <i className="fas fa-exclamation-circle"></i> {error}
+        </ErrorContainer>
+      )}
+
       <TabsContainer>
         <TabButton
           $active={activeTab === "parametres"}
@@ -696,7 +897,6 @@ const GestionTemps: React.FC = () => {
           <h3 style={{ color: "#4facfe", marginBottom: "12px" }}>
             <i className="fas fa-user-cog"></i> Intervenants
           </h3>
-          {/* Formulaire ajout intervenant */}
           <div
             style={{
               display: "flex",
@@ -723,6 +923,7 @@ const GestionTemps: React.FC = () => {
             />
             <Button
               $variant="primary"
+              disabled={saving}
               onClick={() => {
                 const nom = (
                   document.getElementById("intervNom") as HTMLInputElement
@@ -759,6 +960,7 @@ const GestionTemps: React.FC = () => {
                     <td>
                       <Button
                         $variant="danger"
+                        disabled={saving}
                         onClick={() => deleteIntervenant(i.id)}
                       >
                         Suppr.
@@ -793,14 +995,15 @@ const GestionTemps: React.FC = () => {
             />
             <Button
               $variant="primary"
+              disabled={saving}
               onClick={() => {
-                const nom = (
+                const name = (
                   document.getElementById("clientNom") as HTMLInputElement
                 ).value;
                 const code = (
                   document.getElementById("clientCode") as HTMLInputElement
                 ).value;
-                addClient(nom, code);
+                addClient(name, code);
               }}
             >
               Ajouter
@@ -818,11 +1021,12 @@ const GestionTemps: React.FC = () => {
               <tbody>
                 {clients.map((c) => (
                   <tr key={c.id}>
-                    <td>{c.nom}</td>
+                    <td>{c.name}</td>
                     <td>{c.code}</td>
                     <td>
                       <Button
                         $variant="danger"
+                        disabled={saving}
                         onClick={() => deleteClient(c.id)}
                       >
                         Suppr.
@@ -862,6 +1066,7 @@ const GestionTemps: React.FC = () => {
             />
             <Button
               $variant="primary"
+              disabled={saving}
               onClick={() => {
                 const nom = (
                   document.getElementById("missionNom") as HTMLInputElement
@@ -901,6 +1106,7 @@ const GestionTemps: React.FC = () => {
                     <td>
                       <Button
                         $variant="danger"
+                        disabled={saving}
                         onClick={() => deleteMission(m.id)}
                       >
                         Suppr.
@@ -916,6 +1122,45 @@ const GestionTemps: React.FC = () => {
 
       {activeTab === "saisie" && (
         <div>
+          <ImportArea>
+            <ImportButton
+              onClick={() => fileInputRef.current?.click()}
+              disabled={saving}
+            >
+              <i className="fas fa-upload"></i> Importer Excel
+            </ImportButton>
+            <FileInput
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={handleFileSelect}
+              disabled={saving}
+            />
+            {importFile && (
+              <>
+                <FileName>
+                  <i className="fas fa-file-excel"></i> {importFile.name}
+                </FileName>
+                <Button
+                  $variant="primary"
+                  onClick={handleImport}
+                  disabled={saving}
+                >
+                  <i className="fas fa-play"></i> Démarrer l'import
+                </Button>
+                <Button
+                  $variant="secondary"
+                  onClick={() => {
+                    setImportFile(null);
+                    if (fileInputRef.current) fileInputRef.current.value = "";
+                  }}
+                >
+                  Annuler
+                </Button>
+              </>
+            )}
+          </ImportArea>
+
           <div
             style={{
               marginBottom: "16px",
@@ -940,6 +1185,7 @@ const GestionTemps: React.FC = () => {
                 onChange={(e) =>
                   handleEntryChange("intervenant_id", e.target.value)
                 }
+                disabled={saving}
               >
                 <option value="">Intervenant</option>
                 {intervenants.map((i) => (
@@ -952,6 +1198,7 @@ const GestionTemps: React.FC = () => {
                 type="date"
                 value={newEntry.date || ""}
                 onChange={(e) => handleEntryChange("date", e.target.value)}
+                disabled={saving}
                 style={{ width: "130px" }}
               />
               <StyledSelect
@@ -959,11 +1206,12 @@ const GestionTemps: React.FC = () => {
                 onChange={(e) =>
                   handleEntryChange("client_code", e.target.value)
                 }
+                disabled={saving}
               >
                 <option value="">Client</option>
                 {clients.map((c) => (
                   <option key={c.id} value={c.code}>
-                    {c.code} - {c.nom}
+                    {c.code} - {c.name}
                   </option>
                 ))}
               </StyledSelect>
@@ -976,6 +1224,7 @@ const GestionTemps: React.FC = () => {
                 onChange={(e) =>
                   handleEntryChange("duree", parseFloat(e.target.value) || 0)
                 }
+                disabled={saving}
                 style={{ width: "100px" }}
               />
               <StyledSelect
@@ -983,6 +1232,7 @@ const GestionTemps: React.FC = () => {
                 onChange={(e) =>
                   handleEntryChange("mission_id", e.target.value)
                 }
+                disabled={saving}
               >
                 <option value="">Mission</option>
                 {missions.map((m) => (
@@ -994,7 +1244,7 @@ const GestionTemps: React.FC = () => {
               <StyledSelect
                 value={newEntry.task || ""}
                 onChange={(e) => handleEntryChange("task", e.target.value)}
-                disabled={!newEntry.mission_id}
+                disabled={saving || !newEntry.mission_id}
               >
                 <option value="">Tâche</option>
                 {newEntry.mission_id &&
@@ -1010,6 +1260,7 @@ const GestionTemps: React.FC = () => {
                 placeholder="Détail"
                 value={newEntry.detail || ""}
                 onChange={(e) => handleEntryChange("detail", e.target.value)}
+                disabled={saving}
                 style={{ width: "150px" }}
               />
               <StyledSelect
@@ -1017,11 +1268,16 @@ const GestionTemps: React.FC = () => {
                 onChange={(e) =>
                   handleEntryChange("facturable", e.target.value as "F" | "NF")
                 }
+                disabled={saving}
               >
                 <option value="F">Facturable</option>
                 <option value="NF">Non facturable</option>
               </StyledSelect>
-              <Button $variant="primary" onClick={addTimeEntry}>
+              <Button
+                $variant="primary"
+                disabled={saving}
+                onClick={addTimeEntry}
+              >
                 <i className="fas fa-plus"></i> Ajouter
               </Button>
             </div>
@@ -1051,35 +1307,30 @@ const GestionTemps: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {timeEntries.map((e) => {
-                  const interv = intervenants.find(
-                    (i) => i.id === e.intervenant_id,
-                  );
-                  const mission = missions.find((m) => m.id === e.mission_id);
-                  return (
-                    <tr key={e.id}>
-                      <td>{interv?.nom || ""}</td>
-                      <td>{new Date(e.date).toLocaleDateString("fr-FR")}</td>
-                      <td>{e.client_code}</td>
-                      <td>{e.duree}</td>
-                      <td>{mission?.nom || ""}</td>
-                      <td>{e.task}</td>
-                      <td>{e.detail}</td>
-                      <td>{e.facturable}</td>
-                      <td>
-                        {e.ca_facturable ? `${e.ca_facturable} FCFA` : "0 FCFA"}
-                      </td>
-                      <td>
-                        <Button
-                          $variant="danger"
-                          onClick={() => deleteTimeEntry(e.id)}
-                        >
-                          Suppr.
-                        </Button>
-                      </td>
-                    </tr>
-                  );
-                })}
+                {timeEntries.map((e) => (
+                  <tr key={e.id}>
+                    <td>{getIntervenantName(e.intervenant_id)}</td>
+                    <td>{new Date(e.date).toLocaleDateString("fr-FR")}</td>
+                    <td>{e.client_code}</td>
+                    <td>{e.duree}</td>
+                    <td>{getMissionName(e.mission_id)}</td>
+                    <td>{e.task}</td>
+                    <td>{e.detail}</td>
+                    <td>{e.facturable}</td>
+                    <td>
+                      {e.ca_facturable ? `${e.ca_facturable} FCFA` : "0 FCFA"}
+                    </td>
+                    <td>
+                      <Button
+                        $variant="danger"
+                        disabled={saving}
+                        onClick={() => deleteTimeEntry(e.id)}
+                      >
+                        Suppr.
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </StyledTable>
           </TableWrapper>
@@ -1098,7 +1349,7 @@ const GestionTemps: React.FC = () => {
                 <option value="">Tous</option>
                 {clients.map((c) => (
                   <option key={c.id} value={c.code}>
-                    {c.code} - {c.nom}
+                    {c.code} - {c.name}
                   </option>
                 ))}
               </select>

@@ -49,9 +49,9 @@ const kpiIcons: Record<string, string> = {
   "active-engagements": "bar-chart",
   "open-review-notes": "alert-triangle",
   "open-findings": "search",
-  "active-clients": "dollar-sign",
-  "inventory-value": "dollar-sign",
-  "asset-value": "dollar-sign",
+  "active-clients": "briefcase",
+  "inventory-value": "package",
+  "asset-value": "landmark",
   "employees-on-leave": "users",
 };
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 
 interface UseSupabaseQueryOptions {
@@ -25,6 +25,9 @@ export function useSupabaseQuery<T>({
 
   const refetch = useCallback(() => setVersion((v) => v + 1), []);
 
+  // Stable stringified version of the filter object
+  const filterString = useMemo(() => JSON.stringify(filter), [filter]);
+
   useEffect(() => {
     if (!enabled) {
       setLoading(false);
@@ -35,35 +38,44 @@ export function useSupabaseQuery<T>({
 
     async function fetch() {
       setLoading(true);
-      let query = supabase.from(table).select(select);
+      try {
+        console.log(`useSupabaseQuery: preparing fetch`, { table, select, filter, enabled, version });
+        let query = supabase.from(table).select(select);
 
-      if (filter) {
-        Object.entries(filter).forEach(([key, value]) => {
-          query = query.eq(key, value);
-        });
-      }
+        if (filter) {
+          Object.entries(filter).forEach(([key, value]) => {
+            query = query.eq(key, value);
+          });
+        }
 
-      if (orderBy) {
-        query = query.order(orderBy, { ascending: orderAsc });
-      }
+        if (orderBy) {
+          query = query.order(orderBy, { ascending: orderAsc });
+        }
 
-      const { data: result, error: err } = await query;
+        const { data: result, error: err } = await query;
+        console.log(`useSupabaseQuery: fetched`, { table, error: err, result });
 
-      if (cancelled) return;
+        if (cancelled) return;
 
-      if (err) {
-        setError(err.message);
+        if (err) {
+          setError(err.message);
+          setData([]);
+        } else {
+          setData((result as T[]) ?? []);
+          setError(null);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Erreur de chargement");
         setData([]);
-      } else {
-        setData((result as T[]) ?? []);
-        setError(null);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-      setLoading(false);
     }
 
     fetch();
     return () => { cancelled = true; };
-  }, [table, select, orderBy, orderAsc, enabled, version, JSON.stringify(filter)]);
+  }, [table, select, orderBy, orderAsc, enabled, version, filterString]); // now uses stable filterString
 
   return { data, loading, error, refetch };
 }

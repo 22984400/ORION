@@ -3,6 +3,7 @@ import { Plus, Mail, MoreHorizontal, Save, Lock } from "lucide-react";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Badge } from "../../components/ui/Badge";
 import { cn, getInitials } from "../../lib/utils";
+import { addNotification } from "../../lib/notifications";
 import { supabase } from "../../lib/supabase";
 import { useSupabaseQuery } from "../../hooks/useSupabaseData";
 import { USER_ROLE_LABELS } from "../../lib/constants";
@@ -99,6 +100,11 @@ export function TeamPage() {
         if (error) throw error;
       }
       setSaved(true);
+      void addNotification({
+        title: "Permissions mises à jour",
+        message: "Les permissions de l'équipe ont été mises à jour.",
+        type: "team",
+      });
       setTimeout(() => setSaved(false), 3000);
     } catch (err: any) {
       alert("Erreur de sauvegarde : " + err.message);

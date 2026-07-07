@@ -13,6 +13,7 @@ import { PageHeader } from "../../components/ui/PageHeader";
 import { Badge } from "../../components/ui/Badge";
 import { cn, formatShortDate } from "../../lib/utils";
 import { supabase } from "../../lib/supabase";
+import { addNotification } from "../../lib/notifications";
 import { MISSION_STATUS_CONFIG, URGENCY_CONFIG } from "../../lib/constants";
 import type { WeeklyMission, Client, Profile } from "../../types";
 
@@ -135,7 +136,19 @@ export function EngagementsPage() {
   // Supprimer
   const handleDelete = async (id: string) => {
     if (!confirm("Supprimer cette mission ?")) return;
-    await supabase.from("weekly_missions").delete().eq("id", id);
+    const { error } = await supabase
+      .from("weekly_missions")
+      .delete()
+      .eq("id", id);
+    if (error) {
+      alert("Erreur lors de la suppression : " + error.message);
+      return;
+    }
+    void addNotification({
+      title: "Mission supprimée",
+      message: "Une mission a été supprimée.",
+      type: "engagement",
+    });
     fetchData();
   };
 

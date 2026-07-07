@@ -12,6 +12,7 @@ import {
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Badge } from "../../components/ui/Badge";
 import { cn, formatDate, formatNumber } from "../../lib/utils";
+import { addNotification } from "../../lib/notifications";
 import { useSupabaseQuery } from "../../hooks/useSupabaseData";
 import { supabase } from "../../lib/supabase";
 import type { WorkingPaper } from "../../types";
@@ -101,6 +102,11 @@ export function WorkingPapersPage() {
       if (insertError) throw insertError;
 
       await refetch();
+      void addNotification({
+        title: "Document de travail téléversé",
+        message: `Le document "${file.name}" a été téléversé.`,
+        type: "working_paper",
+      });
       setShowUpload(false);
       setFile(null);
       setForm({ name: "", folder: "", reference: "", status: "draft" });

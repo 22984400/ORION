@@ -14,6 +14,7 @@ import { PageHeader } from "../../components/ui/PageHeader";
 import { Badge } from "../../components/ui/Badge";
 import { cn, formatDate } from "../../lib/utils";
 import { supabase } from "../../lib/supabase";
+import { addNotification } from "../../lib/notifications";
 import { useSupabaseQuery } from "../../hooks/useSupabaseData";
 import { SEVERITY_LABELS } from "../../lib/constants";
 import type { ReviewNote } from "../../types";
@@ -100,8 +101,18 @@ export function ReviewNotesPage() {
         .from("review_notes")
         .update(payload)
         .eq("id", editingNote.id);
+      void addNotification({
+        title: "Note de revue mise à jour",
+        message: `La note ${editingNote.reference} a été mise à jour.`,
+        type: "review_note",
+      });
     } else {
       await supabase.from("review_notes").insert([payload]);
+      void addNotification({
+        title: "Nouvelle note de revue",
+        message: "Une note de revue a été créée.",
+        type: "review_note",
+      });
     }
     refetch();
     setShowModal(false);
@@ -111,6 +122,11 @@ export function ReviewNotesPage() {
   const handleDelete = async (id: string) => {
     if (!confirm("Supprimer cette note ?")) return;
     await supabase.from("review_notes").delete().eq("id", id);
+    void addNotification({
+      title: "Note de revue supprimée",
+      message: "Une note de revue a été supprimée.",
+      type: "review_note",
+    });
     refetch();
   };
 

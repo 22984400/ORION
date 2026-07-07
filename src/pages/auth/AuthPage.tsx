@@ -95,7 +95,10 @@ export function AuthPage() {
           navigate('/', { replace: true });
         }
       } else {
-        const result = await signUp({ email, password, fullName, company: company || undefined });
+        const parts = fullName.trim().split(/\s+/);
+        const firstName = parts[0] ?? "";
+        const lastName = parts.slice(1).join(" ") || firstName;
+        const result = await signUp({ email, password, firstName, lastName });
         if (result.error) {
           setError(resolveError(result.error));
         } else {
@@ -143,14 +146,6 @@ export function AuthPage() {
     } finally {
       setLoading(false);
     }
-  }
-
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
-        <div className="w-8 h-8 border-2 border-royal-500/30 border-t-royal-600 rounded-full animate-spin" />
-      </div>
-    );
   }
 
   return (

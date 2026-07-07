@@ -1,4 +1,6 @@
-import { useMemo } from "react";
+// src/pages/DashboardPage.tsx
+import { useMemo, useEffect } from "react";
+import { supabase } from "../lib/supabase";
 import { useNavigate } from "react-router-dom";
 import { StatCard } from "../components/ui/StatCard";
 import { QuickActions } from "../components/dashboard/QuickActions";
@@ -43,6 +45,7 @@ const miniCharts: Record<string, number[]> = {
   "inventory-value": [65, 70, 68, 75, 80, 82, 85, 88, 92, 95],
   "asset-value": [90, 88, 92, 95, 93, 97, 95, 98, 96, 100],
   "employees-on-leave": [1, 0, 2, 1, 0, 1, 2, 1, 1, 1],
+  "open-expenses": [2, 3, 4, 3, 5, 4, 3, 4, 3, 5],
 };
 
 const kpiIcons: Record<string, string> = {
@@ -53,59 +56,155 @@ const kpiIcons: Record<string, string> = {
   "inventory-value": "package",
   "asset-value": "landmark",
   "employees-on-leave": "users",
+  "open-expenses": "receipt",
 };
 
 export function DashboardPage() {
   const navigate = useNavigate();
 
-  // ✅ Tables corrigées
-  const { data: engagements, loading: loadingEngagements } =
-    useSupabaseQuery<Engagement>({
-      table: "weekly_missions",
-      orderBy: "created_at",
-      orderAsc: false,
-    });
+  // ✅ Gestionnaire des actions rapides
+  const handleQuickAction = (actionId: string) => {
+    switch (actionId) {
+      case "new-engagement":
+        navigate("/engagements/new");
+        break;
+      case "new-finding":
+        navigate("/findings/new");
+        break;
+      case "stock-in":
+        navigate("/stock/in");
+        break;
+      case "request-leave":
+        navigate("/leave/request");
+        break;
+      case "upload-paper":
+        navigate("/upload");
+        break;
+      case "new-expense":
+        navigate("/note-de-frais");
+        break;
+      default:
+        console.warn("Action non reconnue :", actionId);
+    }
+  };
 
-  const { data: reviewNotes } = useSupabaseQuery<ReviewNote>({
+  // ✅ Tables corrigées
+  const {
+    data: engagements,
+    loading: engLoading,
+    error: engError,
+  } = useSupabaseQuery<Engagement>({
+    table: "weekly_missions",
+    orderBy: "created_at",
+    orderAsc: false,
+  });
+
+  const {
+    data: reviewNotes,
+    loading: rnLoading,
+    error: rnError,
+  } = useSupabaseQuery<ReviewNote>({
     table: "review_notes",
     orderBy: "created_at",
     orderAsc: false,
   });
 
-  const { data: findings } = useSupabaseQuery<Finding>({
+  const {
+    data: findings,
+    loading: fndLoading,
+    error: fndError,
+  } = useSupabaseQuery<Finding>({
     table: "findings",
     orderBy: "created_at",
     orderAsc: false,
   });
 
-  const { data: clients } = useSupabaseQuery<Client>({
+  const {
+    data: clients,
+    loading: clLoading,
+    error: clError,
+  } = useSupabaseQuery<Client>({
     table: "clients",
     orderBy: "created_at",
     orderAsc: false,
   });
 
-  const { data: stock } = useSupabaseQuery<StockItem>({
+  const {
+    data: stock,
+    loading: stLoading,
+    error: stError,
+  } = useSupabaseQuery<StockItem>({
     table: "stock_items",
     orderBy: "item_name",
   });
 
-  const { data: assets } = useSupabaseQuery<FixedAsset>({
+  const {
+    data: assets,
+    loading: asLoading,
+    error: asError,
+  } = useSupabaseQuery<FixedAsset>({
     table: "fixed_assets",
     orderBy: "created_at",
     orderAsc: false,
   });
 
-  const { data: leave } = useSupabaseQuery<LeaveRequest>({
+  const {
+    data: leave,
+    loading: lvLoading,
+    error: lvError,
+  } = useSupabaseQuery<LeaveRequest>({
     table: "leave_requests",
     orderBy: "created_at",
     orderAsc: false,
   });
 
-  const { data: notifications } = useSupabaseQuery<Notification>({
+  const {
+    data: notifications,
+    loading: ntLoading,
+    error: ntError,
+  } = useSupabaseQuery<Notification>({
     table: "notifications",
     orderBy: "created_at",
     orderAsc: false,
   });
+  const { data: expenseReports } = useSupabaseQuery<any>({
+    table: "expense_reports",
+    orderBy: "created_at",
+    orderAsc: false,
+  });
+
+  // Debug logs after hooks
+  console.log("Dashboard hooks:", {
+    engagements: {
+      loading: engLoading,
+      error: engError,
+      count: engagements.length,
+    },
+    reviewNotes: {
+      loading: rnLoading,
+      error: rnError,
+      count: reviewNotes.length,
+    },
+    findings: { loading: fndLoading, error: fndError, count: findings.length },
+    clients: { loading: clLoading, error: clError, count: clients.length },
+    stock: { loading: stLoading, error: stError, count: stock.length },
+    assets: { loading: asLoading, error: asError, count: assets.length },
+    leave: { loading: lvLoading, error: lvError, count: leave.length },
+    notifications: {
+      loading: ntLoading,
+      error: ntError,
+      count: (notifications || []).length,
+    },
+  });
+
+  // Direct supabase network test
+  useEffect(() => {
+    supabase
+      .from("clients")
+      .select("*")
+      .then((res) => console.log("direct supabase fetch (clients):", res))
+      .catch((e) => console.error("direct supabase fetch error", e));
+  }, []);
 
   // ---- KPI ----
   const activeEngagements = engagements.filter((e) =>
@@ -130,6 +229,9 @@ export function DashboardPage() {
     .reduce((s, a) => s + (a.net_book_value || 0), 0);
 
   const employeesOnLeave = leave.filter((l) => l.status === "approved").length;
+  const openExpenseReports = expenseReports.filter(
+    (r) => r.status === "soumis" || r.status === "brouillon",
+  ).length;
 
   const kpiData = useMemo(
     () => [
@@ -188,12 +290,12 @@ export function DashboardPage() {
         color: "cyan" as const,
       },
       {
-        id: "employees-on-leave",
-        label: "Employés en congé",
-        value: employeesOnLeave,
-        change: 0,
-        changeLabel: "Stable",
-        trend: "flat" as const,
+        id: "open-expenses",
+        label: "Notes de frais ouvertes",
+        value: openExpenseReports,
+        change: 10,
+        changeLabel: "vs mois dernier",
+        trend: "up" as const,
         color: "primary" as const,
       },
     ],
@@ -205,6 +307,7 @@ export function DashboardPage() {
       inventoryValue,
       assetValue,
       employeesOnLeave,
+      openExpenseReports,
     ],
   );
 
@@ -234,15 +337,6 @@ export function DashboardPage() {
       date: n.created_at,
     }));
   }, [notifications]);
-
-  // ---- Rendu ----
-  if (loadingEngagements) {
-    return (
-      <div className="flex items-center justify-center h-40">
-        <div className="w-8 h-8 border-2 border-primary-500/30 border-t-primary-500 rounded-full animate-spin" />
-      </div>
-    );
-  }
 
   return (
     <div className="page-container">
@@ -278,7 +372,8 @@ export function DashboardPage() {
       {/* Bas de page */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <CategoryChart data={reviewNotesChart} />
-        <QuickActions className="lg:col-span-1" />
+        {/* ✅ Passage de la fonction handleQuickAction */}
+        <QuickActions onAction={handleQuickAction} className="lg:col-span-1" />
         <div className="card p-5">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-medium text-slate-200">

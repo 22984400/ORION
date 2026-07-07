@@ -1,0 +1,71 @@
+﻿
+> vite-react-typescript-starter@0.0.0 typecheck
+> tsc --noEmit -p tsconfig.app.json
+
+src/lib/db-mappers.ts(5,3): error TS2741: Property 'updated_at' is missing in type '{ id: string; engagement_id: string; finding: string; risk_level: string; recommendation: string | undefined; management_response: string | undefined; responsible_person: string | undefined; target_date: string | undefined; status: string; created_at: string; }' but required in type 'Finding'.
+src/lib/sample-data.ts(33,3): error TS2741: Property 'updated_at' is missing in type '{ id: string; engagement_id: string; finding: string; risk_level: string; recommendation: string; management_response: string; responsible_person: string; target_date: string; status: string; created_at: string; }' but required in type 'Finding'.
+src/lib/sample-data.ts(34,3): error TS2741: Property 'updated_at' is missing in type '{ id: string; engagement_id: string; finding: string; risk_level: string; recommendation: string; management_response: string; responsible_person: string; target_date: string; status: string; created_at: string; }' but required in type 'Finding'.
+src/lib/sample-data.ts(35,188): error TS2322: Type 'null' is not assignable to type 'string | undefined'.
+src/lib/sample-data.ts(36,3): error TS2741: Property 'updated_at' is missing in type '{ id: string; engagement_id: string; finding: string; risk_level: string; recommendation: string; management_response: string; responsible_person: string; target_date: string; status: string; created_at: string; }' but required in type 'Finding'.
+src/pages/engagements/EngagementsPage.tsx(9,3): error TS6133: 'Users' is declared but its value is never read.
+src/pages/engagements/EngagementsPage.tsx(18,38): error TS2305: Module '"../../types"' has no exported member 'Profile'.
+src/pages/engagements/EngagementsPage.tsx(76,18): error TS2345: Argument of type '{ id: any; name: any; }[]' is not assignable to parameter of type 'SetStateAction<Client[]>'.
+  Type '{ id: any; name: any; }[]' is not assignable to type 'Client[]'.
+    Type '{ id: any; name: any; }' is missing the following properties from type 'Client': status, created_at
+src/pages/facture/InvoiceDetailPage.tsx(148,7): error TS2353: Object literal may only specify known properties, and 'margin' does not exist in type 'HTMLElement'.
+src/pages/facture/InvoiceDetailPage.tsx(165,26): error TS2559: Type 'HTMLElement' has no properties in common with type 'Html2PdfOptions'.
+src/pages/FindingsPage.tsx(121,14): error TS2552: Cannot find name 'addNotification'. Did you mean 'Notification'?
+src/pages/FindingsPage.tsx(127,14): error TS2552: Cannot find name 'addNotification'. Did you mean 'Notification'?
+src/pages/FindingsPage.tsx(149,12): error TS2552: Cannot find name 'addNotification'. Did you mean 'Notification'?
+src/pages/FindingsPage.tsx(275,16): error TS6133: 'value' is declared but its value is never read.
+src/pages/FindingsPage.tsx(372,20): error TS2322: Type 'Finding[]' is not assignable to type 'Record<string, unknown>[]'.
+  Type 'Finding' is not assignable to type 'Record<string, unknown>'.
+    Index signature for type 'string' is missing in type 'Finding'.
+src/pages/FindingsPage.tsx(372,36): error TS2322: Type 'ColumnDef<Finding>[]' is not assignable to type 'ColumnDef<Record<string, unknown>>[]'.
+  Type 'ColumnDef<Finding>' is not assignable to type 'ColumnDef<Record<string, unknown>>'.
+    Types of property 'render' are incompatible.
+      Type '((value: string | undefined, row: Finding) => ReactNode) | undefined' is not assignable to type '((value: unknown, row: Record<string, unknown>) => ReactNode) | undefined'.
+        Type '(value: string | undefined, row: Finding) => ReactNode' is not assignable to type '(value: unknown, row: Record<string, unknown>) => ReactNode'.
+          Types of parameters 'value' and 'value' are incompatible.
+            Type 'unknown' is not assignable to type 'string | undefined'.
+src/pages/fixed-assets/FixedAssetsPage.tsx(122,5): error TS2322: Type '"Draft"' is not assignable to type 'AssetStatus | undefined'.
+src/pages/fixed-assets/FixedAssetsPage.tsx(273,11): error TS2322: Type '"Draft"' is not assignable to type 'AssetStatus | undefined'.
+src/pages/fixed-assets/FixedAssetsPage.tsx(565,31): error TS2367: This comparison appears to be unintentional because the types 'AssetStatus' and '"Active"' have no overlap.
+src/pages/fixed-assets/FixedAssetsPage.tsx(567,35): error TS2367: This comparison appears to be unintentional because the types 'AssetStatus' and '"Disposed"' have no overlap.
+src/pages/fixed-assets/FixedAssetsPage.tsx(569,37): error TS2367: This comparison appears to be unintentional because the types 'AssetStatus' and '"Draft"' have no overlap.
+src/pages/fixed-assets/FixedAssetsPage.tsx(574,30): error TS2367: This comparison appears to be unintentional because the types 'AssetStatus' and '"Active"' have no overlap.
+src/pages/fixed-assets/FixedAssetsPage.tsx(576,33): error TS2367: This comparison appears to be unintentional because the types 'AssetStatus' and '"Disposed"' have no overlap.
+src/pages/fixed-assets/FixedAssetsPage.tsx(578,35): error TS2367: This comparison appears to be unintentional because the types 'AssetStatus' and '"In_Maintenance"' have no overlap.
+src/pages/fixed-assets/FixedAssetsPage.tsx(621,28): error TS2367: This comparison appears to be unintentional because the types 'AssetStatus' and '"Draft"' have no overlap.
+src/pages/fixed-assets/FixedAssetsPage.tsx(669,33): error TS18048: 'percent' is possibly 'undefined'.
+src/pages/fixed-assets/FixedAssetsPage.tsx(672,43): error TS6133: 'entry' is declared but its value is never read.
+src/pages/fixed-assets/FixedAssetsPage.tsx(704,40): error TS6133: 'entry' is declared but its value is never read.
+src/pages/fixed-assets/FixedAssetsPage.tsx(731,33): error TS18048: 'percent' is possibly 'undefined'.
+src/pages/fixed-assets/FixedAssetsPage.tsx(734,41): error TS6133: 'entry' is declared but its value is never read.
+src/pages/fixed-assets/FixedAssetsPage.tsx(762,41): error TS2367: This comparison appears to be unintentional because the types 'AssetStatus' and '"Active"' have no overlap.
+src/pages/fixed-assets/FixedAssetsPage.tsx(768,41): error TS2367: This comparison appears to be unintentional because the types 'AssetStatus' and '"Draft"' have no overlap.
+src/pages/fixed-assets/FixedAssetsPage.tsx(774,41): error TS2367: This comparison appears to be unintentional because the types 'AssetStatus' and '"Disposed"' have no overlap.
+src/pages/fixed-assets/FixedAssetsPage.tsx(780,41): error TS2367: This comparison appears to be unintentional because the types 'AssetStatus' and '"In_Maintenance"' have no overlap.
+src/pages/fixed-assets/FixedAssetsPage.tsx(932,21): error TS2322: Type '{}' is not assignable to type 'string | number | readonly string[] | undefined'.
+src/pages/fixed-assets/FixedAssetsPage.tsx(1100,19): error TS2322: Type '{}' is not assignable to type 'ReactNode'.
+src/pages/fixed-assets/FixedAssetsPage.tsx(1115,20): error TS2367: This comparison appears to be unintentional because the types 'AssetStatus' and '"Draft"' have no overlap.
+src/pages/leave/LeavePage.tsx(9,3): error TS6133: 'Download' is declared but its value is never read.
+src/pages/leave/LeavePage.tsx(11,3): error TS6133: 'X' is declared but its value is never read.
+src/pages/leave/LeavePage.tsx(152,15): error TS6133: 'fileExt' is declared but its value is never read.
+src/pages/manuel/CompetencesCle.tsx(166,7): error TS6133: 'Button' is declared but its value is never read.
+src/pages/manuel/CompetencesCle.tsx(383,11): error TS6196: 'Evaluation' is declared but never used.
+src/pages/manuel/DemandeDocumentsClient.tsx(164,7): error TS6133: 'CheckboxCell' is declared but its value is never read.
+src/pages/manuel/DemandeDocumentsClient.tsx(608,38): error TS18046: 'err' is of type 'unknown'.
+src/pages/manuel/GestionDocumentation.tsx(124,7): error TS6133: 'TextArea' is declared but its value is never read.
+src/pages/manuel/LivretAccueilCollab.tsx(245,9): error TS6133: 'OUTIL_ID' is declared but its value is never read.
+src/pages/manuel/PlanningClient.tsx(575,10): error TS6133: 'importFile' is declared but its value is never read.
+src/pages/manuel/RepartitionTaches.tsx(186,21): error TS6133: 'error' is declared but its value is never read.
+src/pages/manuel/SuiviLettresMission.tsx(187,21): error TS6133: 'error' is declared but its value is never read.
+src/pages/noteDeFrais/NoteDeFraisList.tsx(7,1): error TS6133: 'fr' is declared but its value is never read.
+src/pages/reports/ReportsPage.tsx(5,24): error TS7016: Could not find a declaration file for module 'file-saver'. 'C:/Users/treso/Downloads/ORION/project/node_modules/file-saver/dist/FileSaver.min.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/file-saver` if it exists or add a new declaration (.d.ts) file containing `declare module 'file-saver';`
+src/pages/search/SearchPage.tsx(9,3): error TS6133: 'FileText' is declared but its value is never read.
+src/pages/stock/StockPage.tsx(8,3): error TS6133: 'Save' is declared but its value is never read.
+src/pages/stock/StockPage.tsx(9,3): error TS6133: 'Trash2' is declared but its value is never read.
+src/pages/team/TeamPage.tsx(2,10): error TS6133: 'Plus' is declared but its value is never read.
+src/pages/team/TeamPage.tsx(44,23): error TS6133: 'refetch' is declared but its value is never read.

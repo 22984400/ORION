@@ -17,7 +17,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Hexagon,
-  BookOpen, // ✅ NOUVEAU pour l'icône du manuel
+  BookOpen,
+  Receipt,
+  ClipboardList, // ✅ NOUVEAU pour l'icône Suivi CAC
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { NAV_ITEMS } from "../../lib/constants";
@@ -36,7 +38,9 @@ const iconMap: Record<string, React.FC<{ className?: string }>> = {
   Users,
   BarChart3,
   Bell,
-  BookOpen, // ✅ NOUVEAU ajout dans le map
+  BookOpen,
+  Receipt,
+  ClipboardList, // ✅ NOUVEAU ajout dans le map
 };
 
 interface SidebarProps {

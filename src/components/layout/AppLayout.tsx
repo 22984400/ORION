@@ -18,10 +18,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
       />
-      <TopBar
-        onMenuToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
-        sidebarCollapsed={sidebarCollapsed}
-      />
+      <TopBar onMenuToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />
       <main
         className={cn(
           "pt-14 transition-all duration-300 min-h-screen",

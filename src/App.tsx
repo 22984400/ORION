@@ -1,3 +1,4 @@
+// src/App.tsx
 import { lazy, Suspense } from "react";
 import {
   BrowserRouter,
@@ -10,57 +11,7 @@ import { AppLayout } from "./components/layout/AppLayout";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
 import { AuthPage } from "./pages/auth/AuthPage";
 
-const DashboardPage = lazy(() =>
-  import("./pages/DashboardPage").then((m) => ({ default: m.DashboardPage })),
-);
-const ClientsPage = lazy(() =>
-  import("./pages/clients/ClientsPage").then((m) => ({
-    default: m.ClientsPage,
-  })),
-);
-const EngagementsPage = lazy(() =>
-  import("./pages/engagements/EngagementsPage").then((m) => ({
-    default: m.EngagementsPage,
-  })),
-);
-const ReviewNotesPage = lazy(() =>
-  import("./pages/review-notes/ReviewNotesPage").then((m) => ({
-    default: m.ReviewNotesPage,
-  })),
-);
-const FindingsPage = lazy(() =>
-  import("./pages/FindingsPage").then((m) => ({ default: m.FindingsPage })),
-);
-const WorkingPapersPage = lazy(() =>
-  import("./pages/working-papers/WorkingPapersPage").then((m) => ({
-    default: m.WorkingPapersPage,
-  })),
-);
-const StockPage = lazy(() =>
-  import("./pages/stock/StockPage").then((m) => ({ default: m.StockPage })),
-);
-const FixedAssetsPage = lazy(() =>
-  import("./pages/fixed-assets/FixedAssetsPage").then((m) => ({
-    default: m.FixedAssetsPage,
-  })),
-);
-const SearchPage = lazy(() => import("./pages/search/SearchPage"));
-// ...
-<Route path="/search" element={<SearchPage />} />;
-const LeavePage = lazy(() =>
-  import("./pages/leave/LeavePage").then((m) => ({ default: m.LeavePage })),
-);
-const TeamPage = lazy(() =>
-  import("./pages/team/TeamPage").then((m) => ({ default: m.TeamPage })),
-);
-const ReportsPage = lazy(() => import("./pages/reports/ReportsPage"));
-const NotificationsPage = lazy(() =>
-  import("./pages/notifications/NotificationsPage").then((m) => ({
-    default: m.NotificationsPage,
-  })),
-);
-const Manuel = lazy(() => import("./pages/manuel/Manuel"));
-
+// ========== FALLBACK ==========
 function LoadingFallback() {
   return (
     <div className="flex items-center justify-center h-[50vh]">
@@ -72,6 +23,112 @@ function LoadingFallback() {
   );
 }
 
+function ErrorFallback({ error }: { error: Error }) {
+  return (
+    <div
+      style={{
+        padding: "2rem",
+        color: "red",
+        background: "#1e1e2f",
+        minHeight: "100vh",
+      }}
+    >
+      <h2>Erreur de chargement</h2>
+      <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+        {error.message}
+      </pre>
+      <button onClick={() => window.location.reload()}>Réessayer</button>
+    </div>
+  );
+}
+
+// ========== UTILITAIRE ==========
+const lazyWithError = (importFn: () => Promise<any>) => {
+  return lazy(() =>
+    importFn().catch((error) => {
+      console.error("Erreur de chargement du composant:", error);
+      return { default: () => <ErrorFallback error={error} /> };
+    }),
+  );
+};
+
+// ========== PAGES PRINCIPALES (avec lazyWithError) ==========
+const DashboardPage = lazyWithError(() =>
+  import("./pages/DashboardPage").then((m) => ({ default: m.DashboardPage })),
+);
+const ClientsPage = lazyWithError(() => import("./pages/clients/ClientsPage"));
+
+const EngagementsPage = lazyWithError(() =>
+  import("./pages/engagements/EngagementsPage").then((m) => ({
+    default: m.EngagementsPage,
+  })),
+);
+const ReviewNotesPage = lazyWithError(() =>
+  import("./pages/review-notes/ReviewNotesPage").then((m) => ({
+    default: m.ReviewNotesPage,
+  })),
+);
+const FindingsPage = lazyWithError(() =>
+  import("./pages/FindingsPage").then((m) => ({ default: m.FindingsPage })),
+);
+const WorkingPapersPage = lazyWithError(() =>
+  import("./pages/working-papers/WorkingPapersPage").then((m) => ({
+    default: m.WorkingPapersPage,
+  })),
+);
+const StockPage = lazyWithError(() =>
+  import("./pages/stock/StockPage").then((m) => ({ default: m.StockPage })),
+);
+const FixedAssetsPage = lazyWithError(() =>
+  import("./pages/fixed-assets/FixedAssetsPage").then((m) => ({
+    default: m.FixedAssetsPage,
+  })),
+);
+const SearchPage = lazyWithError(() => import("./pages/search/SearchPage"));
+const LeavePage = lazyWithError(() =>
+  import("./pages/leave/LeavePage").then((m) => ({ default: m.LeavePage })),
+);
+const TeamPage = lazyWithError(() =>
+  import("./pages/team/TeamPage").then((m) => ({ default: m.TeamPage })),
+);
+const ReportsPage = lazyWithError(() => import("./pages/reports/ReportsPage"));
+const NotificationsPage = lazyWithError(() =>
+  import("./pages/notifications/NotificationsPage").then((m) => ({
+    default: m.NotificationsPage,
+  })),
+);
+const Manuel = lazyWithError(() => import("./pages/manuel/Manuel"));
+const NoteDeFrais = lazyWithError(() => import("./pages/noteDeFrais/index"));
+
+// ========== COLLABORATEURS ==========
+const CollaborateurFiche = lazyWithError(
+  () => import("./pages/collaborateurs/CollaborateurFiche"),
+);
+const CollaborateurList = lazyWithError(() =>
+  import("./pages/collaborateurs/CollaborateurList").then((m) => ({
+    default: m.CollaborateurList,
+  })),
+);
+
+// ========== FACTURES (INVOICES) ==========
+const InvoicesPage = lazyWithError(
+  () => import("./pages/facture/InvoicesPage"),
+);
+const InvoiceDetailPage = lazyWithError(
+  () => import("./pages/facture/InvoiceDetailPage"),
+);
+const InvoiceFormPage = lazyWithError(
+  () => import("./pages/facture/InvoiceFormPage"),
+);
+
+// ========== SUIVI CAC ==========
+const CACFollowUpPage = lazyWithError(() =>
+  import("./pages/cac/CACFollowUpPage").then((m) => ({
+    default: m.default,
+  })),
+);
+
+// ========== APPLICATION SHELL ==========
 function AppShell() {
   return (
     <ProtectedRoute>
@@ -84,15 +141,19 @@ function AppShell() {
   );
 }
 
+// ========== COMPOSANT PRINCIPAL ==========
 function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Auth */}
         <Route path="/login" element={<AuthPage />} />
         <Route
           path="/signup"
           element={<Navigate to="/login?tab=signup" replace />}
         />
+
+        {/* Routes protégées */}
         <Route element={<AppShell />}>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/clients" element={<ClientsPage />} />
@@ -102,11 +163,27 @@ function App() {
           <Route path="/working-papers" element={<WorkingPapersPage />} />
           <Route path="/stock" element={<StockPage />} />
           <Route path="/fixed-assets" element={<FixedAssetsPage />} />
+          <Route path="/search" element={<SearchPage />} />
           <Route path="/leave" element={<LeavePage />} />
           <Route path="/team" element={<TeamPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/manuel" element={<Manuel />} />
+          <Route path="/note-de-frais" element={<NoteDeFrais />} />
+
+          {/* Collaborateurs */}
+          <Route path="/collaborateurs" element={<CollaborateurList />} />
+          <Route path="/collaborateurs/new" element={<CollaborateurFiche />} />
+          <Route path="/collaborateurs/:id" element={<CollaborateurFiche />} />
+
+          {/* Factures */}
+          <Route path="/factures" element={<InvoicesPage />} />
+          <Route path="/factures/new" element={<InvoiceFormPage />} />
+          <Route path="/factures/:id" element={<InvoiceDetailPage />} />
+          <Route path="/factures/:id/edit" element={<InvoiceFormPage />} />
+
+          {/* Suivi CAC */}
+          <Route path="/cac-suivi" element={<CACFollowUpPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

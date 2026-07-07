@@ -9,6 +9,11 @@ import {
   Users,
   Trash2,
   Check,
+  Building2,
+  Receipt,
+  Package,
+  Landmark,
+  FileSpreadsheet,
 } from "lucide-react";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { cn, formatRelativeTime } from "../../lib/utils";
@@ -22,6 +27,15 @@ const typeIcons: Record<string, React.FC<{ className?: string }>> = {
   document: FileText,
   engagement: Target,
   team: Users,
+  client: Building2,
+  invoice: Receipt,
+  stock: Package,
+  asset: Landmark,
+  report: FileSpreadsheet,
+  review_note: FileText,
+  working_paper: FileText,
+  finding: AlertTriangle,
+  expense: Receipt,
 };
 
 const typeColors: Record<string, string> = {
@@ -31,6 +45,34 @@ const typeColors: Record<string, string> = {
   document: "text-royal-400 bg-royal-500/10",
   engagement: "text-emerald-400 bg-emerald-500/10",
   team: "text-cyan-400 bg-cyan-500/10",
+  client: "text-slate-400 bg-slate-500/10",
+  invoice: "text-amber-400 bg-amber-500/10",
+  stock: "text-emerald-400 bg-emerald-500/10",
+  asset: "text-cyan-400 bg-cyan-500/10",
+  report: "text-royal-400 bg-royal-500/10",
+  review_note: "text-violet-400 bg-violet-500/10",
+  working_paper: "text-emerald-400 bg-emerald-500/10",
+  finding: "text-error-400 bg-error-500/10",
+  expense: "text-yellow-400 bg-yellow-500/10",
+};
+
+const typeLabels: Record<string, string> = {
+  all: "Toutes",
+  assignment: "Assignations",
+  alert: "Alertes",
+  leave: "Congés",
+  document: "Documents",
+  engagement: "Missions",
+  team: "Équipe",
+  client: "Clients",
+  invoice: "Factures",
+  stock: "Stocks",
+  asset: "Immobilisations",
+  report: "Rapports",
+  review_note: "Notes de revue",
+  working_paper: "Documents de travail",
+  finding: "Constats",
+  expense: "Notes de frais",
 };
 
 export function NotificationsPage() {
@@ -42,7 +84,8 @@ export function NotificationsPage() {
   const fetchNotifications = async () => {
     try {
       const { data: userData } = await supabase.auth.getUser();
-      if (!userData?.user) {
+      const userId = userData?.user?.id;
+      if (!userId) {
         setNotifications([]);
         setLoading(false);
         return;
@@ -51,7 +94,7 @@ export function NotificationsPage() {
       const { data, error } = await supabase
         .from("notifications")
         .select("*")
-        .eq("user_id", userData.user.id)
+        .eq("user_id", userId)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
@@ -66,43 +109,60 @@ export function NotificationsPage() {
   };
 
   useEffect(() => {
-    fetchNotifications();
+    let channel: any;
+    let mounted = true;
 
-    // 🔔 Abonnement en temps réel (les nouvelles notifications apparaissent instantanément)
-    const channel = supabase
-      .channel("notifications_changes")
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "notifications",
-        },
-        (payload) => {
-          // Vérifier que la notification est pour l'utilisateur courant
-          const newNotif = payload.new as Notification;
-          setNotifications((prev) => [newNotif, ...prev]);
-        },
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "notifications",
-          filter: "read=eq.false",
-        },
-        (payload) => {
-          const updated = payload.new as Notification;
-          setNotifications((prev) =>
-            prev.map((n) => (n.id === updated.id ? updated : n)),
-          );
-        },
-      )
-      .subscribe();
+    const init = async () => {
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData?.user?.id;
+      if (!userId) {
+        setNotifications([]);
+        setLoading(false);
+        return;
+      }
+
+      await fetchNotifications();
+
+      channel = supabase
+        .channel("notifications_changes")
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "notifications",
+            filter: `user_id=eq.${userId}`,
+          },
+          (payload) => {
+            if (!mounted) return;
+            const newNotif = payload.new as Notification;
+            setNotifications((prev) => [newNotif, ...prev]);
+          },
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "notifications",
+            filter: `user_id=eq.${userId}`,
+          },
+          (payload) => {
+            if (!mounted) return;
+            const updated = payload.new as Notification;
+            setNotifications((prev) =>
+              prev.map((n) => (n.id === updated.id ? updated : n)),
+            );
+          },
+        )
+        .subscribe();
+    };
+
+    init();
 
     return () => {
-      supabase.removeChannel(channel);
+      mounted = false;
+      if (channel) supabase.removeChannel(channel);
     };
   }, []);
 
@@ -124,11 +184,13 @@ export function NotificationsPage() {
   const markAllRead = async () => {
     try {
       const { data: userData } = await supabase.auth.getUser();
-      if (!userData?.user) return;
+      const userId = userData?.user?.id;
+      if (!userId) return;
+
       const { error } = await supabase
         .from("notifications")
         .update({ read: true })
-        .eq("user_id", userData.user.id)
+        .eq("user_id", userId)
         .eq("read", false);
       if (error) throw error;
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
@@ -197,32 +259,37 @@ export function NotificationsPage() {
 
       {/* Filtres */}
       <div className="flex gap-2 mb-6 overflow-x-auto">
-        {["all", "assignment", "alert", "leave", "document", "engagement"].map(
-          (t) => (
-            <button
-              key={t}
-              onClick={() => setTypeFilter(t)}
-              className={cn(
-                "px-3 py-2 rounded-lg text-sm transition-colors whitespace-nowrap",
-                typeFilter === t
-                  ? "bg-primary-600/15 text-primary-300 ring-1 ring-primary-500/25"
-                  : "text-slate-400 hover:bg-slate-700/40",
-              )}
-            >
-              {t === "all"
-                ? "Toutes"
-                : t === "assignment"
-                  ? "Assignations"
-                  : t === "alert"
-                    ? "Alertes"
-                    : t === "leave"
-                      ? "Congés"
-                      : t === "document"
-                        ? "Documents"
-                        : "Missions"}
-            </button>
-          ),
-        )}
+        {[
+          "all",
+          "assignment",
+          "alert",
+          "leave",
+          "document",
+          "engagement",
+          "team",
+          "client",
+          "invoice",
+          "stock",
+          "asset",
+          "report",
+          "review_note",
+          "working_paper",
+          "finding",
+          "expense",
+        ].map((t) => (
+          <button
+            key={t}
+            onClick={() => setTypeFilter(t)}
+            className={cn(
+              "px-3 py-2 rounded-lg text-sm transition-colors whitespace-nowrap",
+              typeFilter === t
+                ? "bg-primary-600/15 text-primary-300 ring-1 ring-primary-500/25"
+                : "text-slate-400 hover:bg-slate-700/40",
+            )}
+          >
+            {typeLabels[t] || t}
+          </button>
+        ))}
       </div>
 
       {/* Liste */}

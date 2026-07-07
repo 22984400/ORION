@@ -5,19 +5,19 @@ export function useUnreadCount() {
   const [count, setCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  const fetchCount = async () => {
+  const fetchCount = async (userId?: string) => {
     try {
-      const { data: userData } = await supabase.auth.getUser();
-      if (!userData?.user) {
+      const currentUserId =
+        userId || (await supabase.auth.getUser()).data.user?.id;
+      if (!currentUserId) {
         setCount(0);
-        setLoading(false);
         return;
       }
 
       const { count, error } = await supabase
         .from("notifications")
         .select("*", { count: "exact", head: true })
-        .eq("user_id", userData.user.id)
+        .eq("user_id", currentUserId)
         .eq("read", false);
 
       if (error) throw error;
@@ -30,52 +30,52 @@ export function useUnreadCount() {
   };
 
   useEffect(() => {
-    fetchCount();
+    let channel: any;
 
-    // 🔔 Écouter les changements en temps réel
-    const channel = supabase
-      .channel("notifications_count")
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "notifications",
-        },
-        async () => {
-          const { data: userData } = await supabase.auth.getUser();
-          if (!userData?.user) return;
-          const { count } = await supabase
-            .from("notifications")
-            .select("*", { count: "exact", head: true })
-            .eq("user_id", userData.user.id)
-            .eq("read", false);
-          setCount(count || 0);
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "notifications",
-          filter: "read=eq.false",
-        },
-        async () => {
-          const { data: userData } = await supabase.auth.getUser();
-          if (!userData?.user) return;
-          const { count } = await supabase
-            .from("notifications")
-            .select("*", { count: "exact", head: true })
-            .eq("user_id", userData.user.id)
-            .eq("read", false);
-          setCount(count || 0);
-        }
-      )
-      .subscribe();
+    const init = async () => {
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData?.user?.id;
+      if (!userId) {
+        setCount(0);
+        setLoading(false);
+        return;
+      }
+
+      await fetchCount(userId);
+
+      channel = supabase
+        .channel("notifications_count")
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "notifications",
+            filter: `user_id=eq.${userId}`,
+          },
+          async () => {
+            await fetchCount(userId);
+          },
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "notifications",
+            filter: `user_id=eq.${userId}`,
+          },
+          async () => {
+            await fetchCount(userId);
+          },
+        )
+        .subscribe();
+    };
+
+    init();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) supabase.removeChannel(channel);
     };
   }, []);
 

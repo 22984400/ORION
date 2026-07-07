@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Plus,
   Check,
@@ -14,6 +14,7 @@ import { PageHeader } from "../../components/ui/PageHeader";
 import { Badge } from "../../components/ui/Badge";
 import { cn, formatDate } from "../../lib/utils";
 import { supabase } from "../../lib/supabase";
+import { addNotification } from "../../lib/notifications";
 import { LEAVE_TYPE_LABELS } from "../../lib/constants";
 import type { LeaveRequest } from "../../types";
 
@@ -37,7 +38,7 @@ export function LeavePage() {
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
-  const fileInputRef = useState<HTMLInputElement | null>(null); // pour reset
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Charger les demandes avec les noms des employés
   const fetchLeaves = async () => {
@@ -197,6 +198,11 @@ export function LeavePage() {
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
+      void addNotification({
+        title: "Demande de congé soumise",
+        message: "Votre demande de congé a été soumise avec succès.",
+        type: "leave",
+      });
     } catch (err: any) {
       alert("Erreur lors de la soumission : " + err.message);
     } finally {
@@ -215,6 +221,11 @@ export function LeavePage() {
         .eq("id", id);
       if (error) throw error;
       await fetchLeaves();
+      void addNotification({
+        title: "Demande de congé approuvée",
+        message: "Une demande de congé a été approuvée.",
+        type: "leave",
+      });
     } catch (err: any) {
       alert("Erreur : " + err.message);
     }
@@ -229,6 +240,11 @@ export function LeavePage() {
         .eq("id", id);
       if (error) throw error;
       await fetchLeaves();
+      void addNotification({
+        title: "Demande de congé rejetée",
+        message: "Une demande de congé a été rejetée.",
+        type: "leave",
+      });
     } catch (err: any) {
       alert("Erreur : " + err.message);
     }
@@ -590,7 +606,7 @@ export function LeavePage() {
                   Justificatif (optionnel)
                 </label>
                 <input
-                  ref={(el) => (fileInputRef.current = el)}
+                  ref={fileInputRef}
                   type="file"
                   onChange={(e) => {
                     if (e.target.files && e.target.files[0]) {

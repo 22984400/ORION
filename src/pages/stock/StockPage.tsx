@@ -1,18 +1,11 @@
 import { useState, useEffect } from "react";
-import {
-  PackagePlus,
-  PackageMinus,
-  Search,
-  X,
-  Edit,
-  Save,
-  Trash2,
-} from "lucide-react";
+import { PackagePlus, PackageMinus, Search, X, Edit } from "lucide-react";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Badge } from "../../components/ui/Badge";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { formatCurrency } from "../../lib/utils";
 import { fetchStockItems } from "../../lib/db-queries";
+import { addNotification } from "../../lib/notifications";
 import { supabase } from "../../lib/supabase";
 import type { StockItem } from "../../types";
 
@@ -106,6 +99,11 @@ export function StockPage() {
     }
 
     await loadItems();
+    void addNotification({
+      title: "Article créé",
+      message: `L'article "${name}" a été créé.`,
+      type: "stock",
+    });
     return data as StockItem;
   };
 
@@ -118,7 +116,6 @@ export function StockPage() {
 
     setSubmitting(true);
     try {
-      // Récupérer ou créer l'article avec le coût unitaire saisi (si >0)
       const unitCost =
         stockInForm.unit_cost > 0 ? stockInForm.unit_cost : undefined;
       const item = await getOrCreateItem(stockInForm.item_name, unitCost);
@@ -160,6 +157,11 @@ export function StockPage() {
       if (movementError) throw movementError;
 
       await loadItems();
+      void addNotification({
+        title: "Entrée de stock enregistrée",
+        message: `L'article "${item.item_name}" a été réceptionné (${stockInForm.quantity}).`,
+        type: "stock",
+      });
       setShowStockIn(false);
       setStockInForm({ item_name: "", quantity: 1, unit_cost: 0, note: "" });
     } catch (err: any) {
@@ -214,6 +216,11 @@ export function StockPage() {
       if (movementError) throw movementError;
 
       await loadItems();
+      void addNotification({
+        title: "Sortie de stock enregistrée",
+        message: `L'article "${item.item_name}" a été sorti (${stockOutForm.quantity}).`,
+        type: "stock",
+      });
       setShowStockOut(false);
       setStockOutForm({ item_name: "", quantity: 1, note: "" });
     } catch (err: any) {
@@ -250,6 +257,11 @@ export function StockPage() {
       if (error) throw error;
 
       await loadItems();
+      void addNotification({
+        title: "Article de stock mis à jour",
+        message: `L'article "${editForm.item_name}" a été mis à jour.`,
+        type: "stock",
+      });
       setShowEditModal(false);
       setEditingItem(null);
     } catch (err: any) {

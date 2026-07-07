@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Menu, LogOut, Settings, ChevronDown, Search } from "lucide-react"; // ✅ Search added
+import { Menu, LogOut, Settings, ChevronDown, Search } from "lucide-react";
 import { cn } from "../../lib/utils";
-import { supabase } from "../../lib/supabase";
+import { useAuth } from "../../contexts/AuthContext"; // 👈 on utilise le contexte
 import { NotificationBadge } from "../ui/NotificationBadge";
 import { GlobalSearch } from "../ui/GlobalSearch";
 
@@ -20,18 +20,33 @@ const getInitials = (name: string): string => {
 
 export function TopBar({ onMenuToggle }: TopBarProps) {
   const navigate = useNavigate();
+  const { signOut, user: authUser } = useAuth(); // 👈 récupération de signOut et de l'utilisateur
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [user, setUser] = useState<any>(null);
+
+  // On utilise l'utilisateur du contexte Auth s'il existe,
+  // sinon on garde la récupération locale (sécurité).
+  const [localUser, setLocalUser] = useState<any>(null);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (data?.user) setUser(data.user);
-    });
-  }, []);
+    // Priorité à l'utilisateur du contexte (plus fiable)
+    if (authUser) {
+      setLocalUser(authUser);
+    } else {
+      // Fallback si le contexte n'a pas encore chargé l'utilisateur
+      import("../../lib/supabase").then(({ supabase }) => {
+        supabase.auth.getUser().then(({ data }) => {
+          if (data?.user) setLocalUser(data.user);
+        });
+      });
+    }
+  }, [authUser]);
+
+  const user = localUser || authUser;
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    navigate("/login");
+    await signOut(); // nettoie session, isDemo, etc.
+    setShowUserMenu(false);
+    navigate("/login", { replace: true }); // redirection vers la page de connexion
   };
 
   const displayName =

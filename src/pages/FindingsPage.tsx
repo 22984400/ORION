@@ -117,6 +117,20 @@ export function FindingsPage() {
 
       if (result.error) throw result.error;
 
+      if (editingFinding) {
+        void addNotification({
+          title: "Constat mis à jour",
+          message: `Le constat a été mis à jour.`,
+          type: "finding",
+        });
+      } else {
+        void addNotification({
+          title: "Nouveau constat",
+          message: `Un nouveau constat a été créé.`,
+          type: "finding",
+        });
+      }
+
       await refetch();
       setShowModal(false);
       setEditingFinding(null);
@@ -132,6 +146,11 @@ export function FindingsPage() {
     try {
       const { error } = await supabase.from("findings").delete().eq("id", id);
       if (error) throw error;
+      void addNotification({
+        title: "Constat supprimé",
+        message: "Un constat a été supprimé.",
+        type: "finding",
+      });
       await refetch();
     } catch (err: any) {
       alert("Erreur lors de la suppression : " + err.message);

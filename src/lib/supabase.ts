@@ -16,19 +16,50 @@ if (!isSupabaseConfigured) {
 }
 
 // =====================================================
-// 2. CRÉATION DU CLIENT SUPABASE
+// 2. CRÉATION DU CLIENT SUPABASE (ou fallback clair si non configuré)
 // =====================================================
-export const supabase: SupabaseClient = createClient(
-  supabaseUrl ?? '',
-  supabaseAnonKey ?? '',
-  {
+function makeMockSupabase() {
+  const errMsg =
+    'Supabase not configured - check VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY';
+
+  const responseWithError = async () => ({ data: null, error: { message: errMsg } });
+
+  const tableBuilder = () => ({
+    select: responseWithError,
+    insert: responseWithError,
+    upsert: responseWithError,
+    update: responseWithError,
+    delete: responseWithError,
+    maybeSingle: responseWithError,
+  });
+
+  return {
+    from: (_: string) => tableBuilder(),
     auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true,
+      getUser: async () => ({ data: { user: null } }),
+      getSession: async () => ({ data: { session: null } }),
+      signInWithPassword: async () => ({ error: { message: errMsg } }),
+      signOut: async () => ({}),
+      resetPasswordForEmail: async () => ({ error: { message: errMsg } }),
+      onAuthStateChange: (_cb: any) => ({ data: { subscription: { unsubscribe: () => {} } } }),
     },
-  }
-);
+    channel: (_: string) => ({
+      on: () => ({ subscribe: async () => ({}) }),
+      subscribe: async () => ({}),
+    }),
+    removeChannel: (_: any) => {},
+  } as unknown as SupabaseClient;
+}
+
+export const supabase: SupabaseClient = isSupabaseConfigured
+  ? createClient(supabaseUrl ?? '', supabaseAnonKey ?? '', {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+      },
+    })
+  : makeMockSupabase();
 
 // =====================================================
 // 3. FONCTION DE VÉRIFICATION DE LA CONNEXION

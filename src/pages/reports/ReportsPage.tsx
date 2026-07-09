@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase } from "../../lib/supabase"; // ✅ chemin corrigé
+import { supabase } from "../../lib/supabase";
 import { Download, Plus, X, FileSpreadsheet } from "lucide-react";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
@@ -10,16 +10,6 @@ import { saveAs } from "file-saver";
 const formatDate = (dateStr: string) => {
   if (!dateStr) return "";
   return new Date(dateStr).toLocaleDateString("fr-FR");
-};
-
-const moduleLabels: Record<string, string> = {
-  missions: "missions",
-  review_notes: "notes de revue",
-  findings: "anomalies",
-  stock_items: "articles en stock",
-  fixed_assets: "actifs immobilisés",
-  leave_requests: "demandes de congé",
-  clients: "clients",
 };
 
 // ============================================================
@@ -45,15 +35,36 @@ export default function ReportsPage() {
     new Date().toISOString().split("T")[0],
   );
   const [customNotes, setCustomNotes] = useState("");
-  const [modules, setModules] = useState([
-    { id: "missions", label: "Missions", checked: true },
-    { id: "review_notes", label: "Notes de revue", checked: true },
-    { id: "findings", label: "Anomalies", checked: true },
-    { id: "stock_items", label: "Stocks", checked: true },
-    { id: "fixed_assets", label: "Actifs", checked: true },
-    { id: "leave_requests", label: "Congés", checked: true },
-    { id: "clients", label: "Clients", checked: true },
-  ]);
+
+  // Mapping des modules vers les tables Supabase et les labels
+  const moduleConfig = {
+    missions: { table: "weekly_missions", label: "Missions" },
+    review_notes: { table: "review_notes", label: "Notes de revue" },
+    findings: { table: "findings", label: "Constats" },
+    stock_items: { table: "stock_items", label: "Stock" },
+    fixed_assets: { table: "fixed_assets", label: "Immobilisations" },
+    leave_requests: { table: "leave_requests", label: "Congés" },
+    clients: { table: "clients", label: "Clients" },
+    cac: { table: "audit_mission_assignments", label: "Suivi CAC" },
+    collaborateurs: { table: "collaborateurs", label: "Collaborateurs" },
+    factures: { table: "invoices", label: "Factures" },
+    notes_de_frais: { table: "expenses", label: "Notes de frais" },
+    // Vous pouvez ajouter d'autres modules ici
+  };
+
+  const moduleKeys = Object.keys(moduleConfig);
+  const moduleLabels: Record<string, string> = {};
+  moduleKeys.forEach((key) => {
+    moduleLabels[key] = moduleConfig[key as keyof typeof moduleConfig].label;
+  });
+
+  const [modules, setModules] = useState(
+    moduleKeys.map((id) => ({
+      id,
+      label: moduleLabels[id],
+      checked: true,
+    })),
+  );
 
   // Chargement des onglets standards (Audit, RH)
   useEffect(() => {
@@ -120,15 +131,26 @@ export default function ReportsPage() {
       const results: any = {};
       for (const moduleId of selectedModules) {
         const tableName =
-          moduleId === "missions" ? "weekly_missions" : moduleId;
+          moduleConfig[moduleId as keyof typeof moduleConfig].table;
+        // Utiliser la colonne de date : créée_at pour la plupart, mais adapter si besoin
+        const dateColumn = "created_at"; // Par défaut
+        // Certaines tables utilisent "date" au lieu de created_at
+        let finalDateColumn = dateColumn;
+        if (moduleId === "missions") finalDateColumn = "date";
+        if (moduleId === "leave_requests") finalDateColumn = "created_at";
+        // Pour les autres, on garde created_at
+
         const { data, error } = await supabase
           .from(tableName)
           .select("*")
-          .gte("created_at", `${customStartDate}T00:00:00`)
-          .lte("created_at", `${customEndDate}T23:59:59`)
-          .order("created_at", { ascending: false });
+          .gte(finalDateColumn, `${customStartDate}T00:00:00`)
+          .lte(finalDateColumn, `${customEndDate}T23:59:59`)
+          .order(finalDateColumn, { ascending: false });
+
         if (!error && data) {
           results[moduleId] = data;
+        } else {
+          console.warn(`Erreur pour ${moduleId}:`, error);
         }
       }
 
@@ -174,16 +196,11 @@ export default function ReportsPage() {
       const worksheet = workbook.addWorksheet("Rapport personnalisé");
       const { data, notes } = customResult;
 
-      // Définition des sections
-      const sections = [
-        { id: "missions", label: "Missions" },
-        { id: "review_notes", label: "Notes de revue" },
-        { id: "findings", label: "Anomalies" },
-        { id: "stock_items", label: "Stocks" },
-        { id: "fixed_assets", label: "Actifs" },
-        { id: "leave_requests", label: "Congés" },
-        { id: "clients", label: "Clients" },
-      ];
+      // Définition des sections (basé sur la configuration)
+      const sections = moduleKeys.map((id) => ({
+        id,
+        label: moduleLabels[id],
+      }));
 
       // Titre principal (fusion)
       worksheet.mergeCells("A1:E1");
@@ -207,19 +224,9 @@ export default function ReportsPage() {
       recapTitle.font = { bold: true };
       currentRow++;
 
-      const recapLabels: Record<string, string> = {
-        missions: "missions",
-        review_notes: "notes de revue",
-        findings: "anomalies",
-        stock_items: "articles en stock",
-        fixed_assets: "actifs immobilisés",
-        leave_requests: "demandes de congé",
-        clients: "clients",
-      };
-
       Object.entries(data).forEach(([moduleId, moduleData]) => {
         const count = Array.isArray(moduleData) ? moduleData.length : 0;
-        worksheet.addRow([`${count} ${recapLabels[moduleId] || moduleId}`]);
+        worksheet.addRow([`${count} ${moduleLabels[moduleId] || moduleId}`]);
         currentRow++;
       });
       worksheet.addRow([]);

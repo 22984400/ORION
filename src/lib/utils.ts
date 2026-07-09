@@ -136,3 +136,35 @@ export function getTrendColor(trend: 'up' | 'down' | 'flat'): string {
 export function generateId(): string {
   return Math.random().toString(36).substring(2, 9);
 }
+// src/lib/utils.ts
+
+/**
+ * Abrège un nombre en milliers (k), millions (M), milliards (Mrd)
+ * avec la devise en option.
+ */
+export function abbreviateNumber(
+  num: number,
+  currency = "FCFA",
+  decimals = 1
+): string {
+  if (num === 0) return `0 ${currency}`;
+
+  const abs = Math.abs(num);
+  let value: number;
+  let suffix = "";
+
+  if (abs >= 1_000_000_000) {
+    value = num / 1_000_000_000;
+    suffix = " Mrd";
+  } else if (abs >= 1_000_000) {
+    value = num / 1_000_000;
+    suffix = " M";
+  } else if (abs >= 1_000) {
+    value = num / 1_000;
+    suffix = " k";
+  } else {
+    return `${num.toFixed(0)} ${currency}`;
+  }
+
+  return `${value.toFixed(decimals)}${suffix} ${currency}`;
+}

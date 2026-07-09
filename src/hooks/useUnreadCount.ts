@@ -31,10 +31,9 @@ export function useUnreadCount() {
 
   useEffect(() => {
     let channel: any;
+    let authSub: any;
 
-    const init = async () => {
-      const { data: userData } = await supabase.auth.getUser();
-      const userId = userData?.user?.id;
+    const setupForUser = async (userId?: string) => {
       if (!userId) {
         setCount(0);
         setLoading(false);
@@ -42,6 +41,15 @@ export function useUnreadCount() {
       }
 
       await fetchCount(userId);
+
+      // remove previous channel if any
+      if (channel) {
+        try {
+          supabase.removeChannel(channel);
+        } catch (e) {
+          // ignore
+        }
+      }
 
       channel = supabase
         .channel("notifications_count")
@@ -72,10 +80,29 @@ export function useUnreadCount() {
         .subscribe();
     };
 
+    const init = async () => {
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData?.user?.id;
+      await setupForUser(userId);
+    };
+
     init();
+
+    // Re-run setup whenever auth state changes so we don't miss the user
+    authSub = supabase.auth.onAuthStateChange(async (_event, session) => {
+      const uid = session?.user?.id;
+      await setupForUser(uid);
+    });
 
     return () => {
       if (channel) supabase.removeChannel(channel);
+      try {
+        authSub?.subscription?.unsubscribe?.();
+        // older supabase versions return { data: { subscription } }
+        if (authSub?.data?.subscription) authSub.data.subscription.unsubscribe();
+      } catch (e) {
+        // ignore
+      }
     };
   }, []);
 

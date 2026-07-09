@@ -52,7 +52,13 @@ export function useSupabaseQuery<T>({
           query = query.order(orderBy, { ascending: orderAsc });
         }
 
-        const { data: result, error: err } = await query;
+        console.time(table);
+
+const { data: result, error: err } = await query;
+
+console.timeEnd(table);
+
+console.log("Finished", table, err);
         console.log(`useSupabaseQuery: fetched`, { table, error: err, result });
 
         if (cancelled) return;

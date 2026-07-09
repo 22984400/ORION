@@ -80,6 +80,12 @@ export default function InvoicesPage() {
     "?";
 
   const load = useCallback(async () => {
+    // ⚠️ Attendre que l'utilisateur soit authentifié
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setTableMissing(false);
@@ -110,7 +116,7 @@ export default function InvoicesPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedCountry.code]);
+  }, [selectedCountry.code, user]); // ✅ Ajout de "user" comme dépendance
 
   useEffect(() => {
     void load();

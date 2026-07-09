@@ -1,4 +1,4 @@
-import { COUNTRIES } from "../lib/constants";
+import { COUNTRIES } from "../../lib/constants";
 
 type MissionType = { id: number; code: string; label: string };
 

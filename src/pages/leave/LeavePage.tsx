@@ -16,11 +16,14 @@ import { cn, formatDate } from "../../lib/utils";
 import { supabase } from "../../lib/supabase";
 import { addNotification } from "../../lib/notifications";
 import { LEAVE_TYPE_LABELS } from "../../lib/constants";
+import { useAuth } from "../../contexts/AuthContext";
 import type { LeaveRequest } from "../../types";
 
 const BUCKET_NAME = "leave_documents";
 
 export function LeavePage() {
+  const { user } = useAuth(); // ✅ Utilisation de useAuth
+
   const [leaves, setLeaves] = useState<LeaveRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -37,11 +40,16 @@ export function LeavePage() {
   const [file, setFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [currentUser, setCurrentUser] = useState<any>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Charger les demandes avec les noms des employés
   const fetchLeaves = async () => {
+    // ⚠️ Attendre que l'utilisateur soit authentifié
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
       const { data: leavesData, error: leavesError } = await supabase
@@ -88,22 +96,17 @@ export function LeavePage() {
     }
   };
 
+  // Initialiser le formulaire avec l'utilisateur actuel
   useEffect(() => {
-    const fetchUser = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user) {
-        setCurrentUser(user);
-        setForm((prev) => ({ ...prev, employee_id: user.id }));
-      }
-    };
-    fetchUser();
-  }, []);
+    if (user) {
+      setForm((prev) => ({ ...prev, employee_id: user.id }));
+    }
+  }, [user]);
 
+  // Charger les données au montage et quand l'utilisateur change
   useEffect(() => {
     fetchLeaves();
-  }, []);
+  }, [user]); // ✅ Dépendance à "user"
 
   const filtered = leaves.filter(
     (l) => statusFilter === "all" || l.status === statusFilter,
@@ -142,7 +145,7 @@ export function LeavePage() {
     const duration = diffDays;
 
     setSubmitting(true);
-    setUploading(!!file); // si fichier sélectionné, uploading = true
+    setUploading(!!file);
 
     try {
       let supportingDocumentUrl: string | null = null;
@@ -194,7 +197,6 @@ export function LeavePage() {
         duration: 1,
       }));
       setFile(null);
-      // Réinitialiser l'input file (via ref)
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
@@ -250,7 +252,7 @@ export function LeavePage() {
     }
   };
 
-  // ----- RENDU (table avec colonne Document) -----
+  // ----- RENDU -----
   return (
     <div className="page-container">
       <PageHeader
@@ -482,15 +484,15 @@ export function LeavePage() {
                 <input
                   type="text"
                   value={
-                    currentUser?.user_metadata?.full_name ||
-                    currentUser?.email ||
+                    user?.user_metadata?.full_name ||
+                    user?.email ||
                     "Utilisateur connecté"
                   }
                   className="input-md w-full bg-slate-800/50 cursor-not-allowed"
                   disabled
                 />
                 <p className="text-xs text-slate-400 mt-1">
-                  Connecté en tant que {currentUser?.email}
+                  Connecté en tant que {user?.email}
                 </p>
               </div>
               <div>

@@ -21,7 +21,7 @@ export const NOTIFICATION_TYPE_LABELS: Record<string, string> = {
 
 export type NotificationPayload = {
   title: string;
-  message: string;
+  message?: string | null; // rendu optionnel
   type?: string;
   userId?: string;
 };
@@ -40,9 +40,12 @@ export async function addNotification({
       return;
     }
 
+    // Fournir un message par défaut si message est vide
+    const finalMessage = message?.trim() || `Notification : ${title}`;
+
     const { error } = await supabase.from("notifications").insert({
       title,
-      message,
+      message: finalMessage,
       type,
       user_id: finalUserId,
       read: false,

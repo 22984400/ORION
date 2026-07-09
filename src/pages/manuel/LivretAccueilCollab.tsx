@@ -2,6 +2,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import styled from "styled-components";
 import { supabase } from "../../lib/supabase";
+import { upsertManualToolContent } from "../../lib/manualToolPersistence";
 import * as mammoth from "mammoth";
 
 // ==================== STYLES ====================
@@ -329,13 +330,11 @@ const LivretAccueilCollab: React.FC = () => {
         console.warn("Warnings lors de la conversion:", warnings);
       }
 
-      // Sauvegarder dans la base
-      const { error: updateError } = await supabase
-        .from("outils_manuel")
-        .update({ contenu: htmlContent })
-        .eq("code", OUTIL_CODE);
-
-      if (updateError) throw updateError;
+      await upsertManualToolContent({
+        code: OUTIL_CODE,
+        contenu: htmlContent,
+        titre: "Livret accueil collaborateur",
+      });
 
       setContent(htmlContent);
       setSuccess("Le livret d'accueil a été importé avec succès !");

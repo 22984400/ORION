@@ -16,8 +16,10 @@ import { supabase } from "../../lib/supabase";
 import { addNotification } from "../../lib/notifications";
 import { MISSION_STATUS_CONFIG, URGENCY_CONFIG } from "../../lib/constants";
 import type { WeeklyMission, Client, Profile } from "../../types";
+import { useAuth } from "../../contexts/AuthContext"; // ← Ajout
 
 export function EngagementsPage() {
+  const { user } = useAuth(); // ← Ajout
   const [missions, setMissions] = useState<WeeklyMission[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -57,6 +59,12 @@ export function EngagementsPage() {
 
   // Charger toutes les données
   const fetchData = async () => {
+    // ⚠️ Attendre que l'utilisateur soit authentifié
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
       // Missions
@@ -91,7 +99,7 @@ export function EngagementsPage() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [user]); // ✅ Ajout de "user" comme dépendance
 
   // Filtrage
   const filtered = missions.filter((m) => {

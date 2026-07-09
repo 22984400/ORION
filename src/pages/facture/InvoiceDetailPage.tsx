@@ -1,10 +1,11 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, Link, useSearchParams } from "react-router-dom";
-import { Edit2, Download, ArrowLeft } from "lucide-react"; // ✅ Check supprimé
+import { Edit2, Download, ArrowLeft } from "lucide-react";
 import { addNotification } from "../../lib/notifications";
 import { supabase } from "../../lib/supabase";
 import { InvoiceTemplate } from "../../components/InvoiceTemplate";
 import html2pdf from "html2pdf.js";
+import { useAuth } from "../../contexts/AuthContext"; // ✅ Ajout
 
 type Invoice = any;
 type Line = any;
@@ -23,6 +24,7 @@ const statusLabels: Record<string, string> = {
 };
 
 export default function InvoiceDetailPage() {
+  const { user } = useAuth(); // ✅ Ajout
   const { id } = useParams();
   const [searchParams] = useSearchParams();
   const [invoice, setInvoice] = useState<Invoice | null>(null);
@@ -44,6 +46,12 @@ export default function InvoiceDetailPage() {
     let cancelled = false;
 
     const load = async () => {
+      // ⚠️ Attendre que l'utilisateur soit authentifié
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       try {
         const { data: invoiceData, error: invoiceError } = await supabase
@@ -103,7 +111,7 @@ export default function InvoiceDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, user]); // ✅ Ajout de "user" comme dépendance
 
   useEffect(() => {
     if (

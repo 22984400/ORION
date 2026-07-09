@@ -1,8 +1,8 @@
-import { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../contexts/AuthContext";
 import { useCountry } from "../../contexts/CountryContext";
-import MissionTypeSelector from "./MissionTypeSelector"; // ← votre composant existant
+import MissionTypeSelector from "./MissionTypeSelector";
 import {
   Plus,
   X,
@@ -27,9 +27,9 @@ import {
   Cell,
   Legend,
 } from "recharts";
-import { PageHeader } from "../../components/ui/PageHeader"; // si vous l'avez, sinon adaptez
+import { PageHeader } from "../../components/ui/PageHeader";
 
-// ----- Types (identiques à votre code) -----
+// ----- Types -----
 type Task = {
   id: string;
   task_code: string;
@@ -65,10 +65,8 @@ export default function CACFollowUpPage() {
   const { user } = useAuth();
   const { selectedCountry } = useCountry();
 
-  // État du type de mission (initialisé à 1 par défaut)
   const [missionTypeId, setMissionTypeId] = useState<number>(1);
 
-  // États pour les données
   const [tasks, setTasks] = useState<Task[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [selectedClients, setSelectedClients] = useState<ClientInfo[]>([]);
@@ -83,113 +81,70 @@ export default function CACFollowUpPage() {
     Record<string, boolean>
   >({});
   const [showCharts, setShowCharts] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Fonction utilitaire pour la clé de cellule
   const cellKey = (taskId: string, clientId: string) =>
     `${taskId}__${clientId}`;
 
   // Chargement des données
   const load = useCallback(async () => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
+    setError(null);
 
-    // 1. Tâches
-    const { data: taskData } = await supabase
-      .from("audit_tasks")
-      .select("*")
-      .eq("mission_type_id", missionTypeId)
-      .eq("is_active", true)
-      .order("display_order");
-    setTasks((taskData || []) as Task[]);
-
-    // 2. Membres d'équipe
-    const { data: members } = await supabase
-      .from("team_members")
-      .select("initials, full_name")
-      .eq("is_active", true)
-      .order("initials");
-    setTeamMembers((members || []) as TeamMember[]);
-
-    // 3. Tous les clients du pays sélectionné
-    const { data: clientData } = await supabase
-      .from("clients")
-      .select("id, name, client_code")
-      .eq("country", selectedCountry.code)
-      .order("client_code");
-    setAllClients((clientData || []) as ClientInfo[]);
-
-    // 4. Récupérer la sélection stockée dans localStorage
-    const storageKey = `cac_clients_${selectedCountry.code}_${missionTypeId}`;
-    const savedIds: string[] = JSON.parse(
-      localStorage.getItem(storageKey) || "[]",
-    );
-
-    // Si pas de sélection, prendre les 5 premiers clients
-    const clientIds =
-      savedIds.length > 0
-        ? savedIds
-        : (clientData || []).slice(0, 5).map((c) => c.id);
-
-    const activeClients = (clientData || []).filter((c) =>
-      clientIds.includes(c.id),
-    );
-    setSelectedClients(activeClients);
-
-    // 5. Charger les affectations pour ces clients
-    if (clientIds.length > 0 && (taskData || []).length > 0) {
-      const { data: assignData } = await supabase
-        .from("audit_mission_assignments")
-        .select(
-          "id, task_id, client_id, production_responsible, supervision_responsible, status, progress_percentage",
-        )
+    try {
+      const { data: taskData } = await supabase
+        .from("audit_tasks")
+        .select("*")
         .eq("mission_type_id", missionTypeId)
-        .in("client_id", clientIds);
+        .eq("is_active", true)
+        .order("display_order");
+      setTasks((taskData || []) as Task[]);
 
-      // Construire la map des cellules
-      const map: Record<string, CellData> = {};
-      for (const a of assignData || []) {
-        const key = cellKey(a.task_id, a.client_id);
-        map[key] = {
-          assignment_id: a.id,
-          production: (a.production_responsible || [])[0] || "",
-          supervision: (a.supervision_responsible || [])[0] || "",
-          status: a.status || "not_started",
-          progress_percentage: a.progress_percentage || 0,
-        };
-      }
+      const { data: members } = await supabase
+        .from("team_members")
+        .select("initials, full_name")
+        .eq("is_active", true)
+        .order("initials");
+      setTeamMembers((members || []) as TeamMember[]);
 
-      // Initialiser automatiquement les affectations manquantes
-      const existingKeys = new Set(Object.keys(map));
-      const missing: { client_id: string; task_id: string }[] = [];
-      for (const cId of clientIds) {
-        for (const t of (taskData || []) as Task[]) {
-          if (!t.is_header) {
-            const k = cellKey(t.id, cId);
-            if (!existingKeys.has(k)) {
-              missing.push({ client_id: cId, task_id: t.id });
-            }
-          }
-        }
-      }
+      const { data: clientData } = await supabase
+        .from("clients")
+        .select("id, name, client_code")
+        .eq("country", selectedCountry.code)
+        .order("client_code");
+      setAllClients((clientData || []) as ClientInfo[]);
 
-      if (missing.length > 0) {
-        const inserts = missing.map((m) => ({
-          client_id: m.client_id,
-          mission_type_id: missionTypeId,
-          task_id: m.task_id,
-          production_responsible: [],
-          supervision_responsible: [],
-          status: "not_started",
-          progress_percentage: 0,
-          comments: "",
-        }));
-        const { data: newAssign } = await supabase
+      const storageKey = `cac_clients_${selectedCountry.code}_${missionTypeId}`;
+      const savedIds: string[] = JSON.parse(
+        localStorage.getItem(storageKey) || "[]",
+      );
+
+      const clientIds =
+        savedIds.length > 0
+          ? savedIds
+          : (clientData || []).slice(0, 5).map((c) => c.id);
+
+      const activeClients = (clientData || []).filter((c) =>
+        clientIds.includes(c.id),
+      );
+      setSelectedClients(activeClients);
+
+      if (clientIds.length > 0 && (taskData || []).length > 0) {
+        const { data: assignData } = await supabase
           .from("audit_mission_assignments")
-          .insert(inserts)
           .select(
             "id, task_id, client_id, production_responsible, supervision_responsible, status, progress_percentage",
-          );
+          )
+          .eq("mission_type_id", missionTypeId)
+          .in("client_id", clientIds);
 
-        for (const a of newAssign || []) {
+        const map: Record<string, CellData> = {};
+        for (const a of assignData || []) {
           const key = cellKey(a.task_id, a.client_id);
           map[key] = {
             assignment_id: a.id,
@@ -199,28 +154,67 @@ export default function CACFollowUpPage() {
             progress_percentage: a.progress_percentage || 0,
           };
         }
+
+        const existingKeys = new Set(Object.keys(map));
+        const missing: { client_id: string; task_id: string }[] = [];
+        for (const cId of clientIds) {
+          for (const t of (taskData || []) as Task[]) {
+            if (!t.is_header) {
+              const k = cellKey(t.id, cId);
+              if (!existingKeys.has(k)) {
+                missing.push({ client_id: cId, task_id: t.id });
+              }
+            }
+          }
+        }
+
+        if (missing.length > 0) {
+          const inserts = missing.map((m) => ({
+            client_id: m.client_id,
+            mission_type_id: missionTypeId,
+            task_id: m.task_id,
+            production_responsible: [],
+            supervision_responsible: [],
+            status: "not_started",
+            progress_percentage: 0,
+            comments: "",
+          }));
+          const { data: newAssign } = await supabase
+            .from("audit_mission_assignments")
+            .insert(inserts)
+            .select(
+              "id, task_id, client_id, production_responsible, supervision_responsible, status, progress_percentage",
+            );
+
+          for (const a of newAssign || []) {
+            const key = cellKey(a.task_id, a.client_id);
+            map[key] = {
+              assignment_id: a.id,
+              production: (a.production_responsible || [])[0] || "",
+              supervision: (a.supervision_responsible || [])[0] || "",
+              status: a.status || "not_started",
+              progress_percentage: a.progress_percentage || 0,
+            };
+          }
+        }
+
+        setCellData(map);
       }
 
-      setCellData(map);
+      setDirty(false);
+    } catch (err) {
+      console.error("Erreur de chargement:", err);
+      setError("Impossible de charger les données. Veuillez rafraîchir.");
+    } finally {
+      setLoading(false);
     }
-
-    setDirty(false);
-    setLoading(false);
-  }, [missionTypeId, selectedCountry.code]);
+  }, [missionTypeId, selectedCountry.code, user]);
 
   useEffect(() => {
     load();
   }, [load]);
 
   // ----- Gestionnaires -----
-  function saveClientSelection() {
-    const storageKey = `cac_clients_${selectedCountry.code}_${missionTypeId}`;
-    localStorage.setItem(
-      storageKey,
-      JSON.stringify(selectedClients.map((c) => c.id)),
-    );
-  }
-
   function addClient(client: ClientInfo) {
     setSelectedClients((prev) => {
       const next = [...prev, client];
@@ -230,7 +224,7 @@ export default function CACFollowUpPage() {
     });
     setShowAddModal(false);
     setAddSearch("");
-    setTimeout(() => load(), 100); // recharge pour créer les affectations
+    setTimeout(() => load(), 100);
   }
 
   function removeClient(clientId: string) {
@@ -248,6 +242,7 @@ export default function CACFollowUpPage() {
       [key]: { ...prev[key], [field]: value },
     }));
     setDirty(true);
+    setError(null);
   }
 
   function toggleCategory(cat: string) {
@@ -256,25 +251,53 @@ export default function CACFollowUpPage() {
 
   async function handleSave() {
     setSaving(true);
-    const updates = Object.entries(cellData);
-    for (const [, cell] of updates) {
-      await supabase
-        .from("audit_mission_assignments")
-        .update({
-          production_responsible: cell.production ? [cell.production] : [],
-          supervision_responsible: cell.supervision ? [cell.supervision] : [],
-          status: cell.status,
-          progress_percentage: cell.progress_percentage,
-          last_updated_by: user?.id || null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", cell.assignment_id);
+    setError(null);
+
+    try {
+      const updates = Object.entries(cellData);
+      if (updates.length === 0) {
+        setSaving(false);
+        return;
+      }
+
+      // Traiter par lots de 10 pour éviter de saturer Supabase
+      const batchSize = 10;
+      for (let i = 0; i < updates.length; i += batchSize) {
+        const batch = updates.slice(i, i + batchSize);
+        await Promise.all(
+          batch.map(async ([, cell]) => {
+            const { error } = await supabase
+              .from("audit_mission_assignments")
+              .update({
+                production_responsible: cell.production
+                  ? [cell.production]
+                  : [],
+                supervision_responsible: cell.supervision
+                  ? [cell.supervision]
+                  : [],
+                status: cell.status,
+                progress_percentage: cell.progress_percentage,
+                last_updated_by: user?.id || null,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", cell.assignment_id);
+            if (error) throw error;
+          }),
+        );
+      }
+
+      setDirty(false);
+      // Petite notification de succès (optionnelle)
+      // addNotification({ title: "Sauvegarde réussie", message: "Les modifications ont été enregistrées.", type: "alert" });
+    } catch (err) {
+      console.error("Erreur lors de la sauvegarde :", err);
+      setError("Erreur lors de la sauvegarde. Veuillez réessayer.");
+    } finally {
+      setSaving(false);
     }
-    setDirty(false);
-    setSaving(false);
   }
 
-  // ----- Calculs pour les graphiques et statistiques -----
+  // ----- Calculs pour les graphiques -----
   const categories: string[] = [];
   const tasksByCategory: Record<string, Task[]> = {};
   for (const t of tasks) {
@@ -285,7 +308,6 @@ export default function CACFollowUpPage() {
     tasksByCategory[t.category].push(t);
   }
 
-  // Progression par client
   const clientProgress = selectedClients.map((c) => {
     let applicable = 0;
     let done = 0;
@@ -304,7 +326,6 @@ export default function CACFollowUpPage() {
     return { ...c, pct: applicable > 0 ? Math.round(done / applicable) : 0 };
   });
 
-  // Agrégats
   const totalCompleted = Object.values(cellData).filter(
     (c) => c.status === "completed",
   ).length;
@@ -341,7 +362,6 @@ export default function CACFollowUpPage() {
   const completedClients = clientProgress.filter((c) => c.pct === 100).length;
   const overdueClients = clientProgress.filter((c) => c.pct < 50).length;
 
-  // Styles
   function getCellBg(status: string): string {
     if (status === "completed") return "bg-green-100";
     if (status === "in_progress") return "bg-yellow-100";
@@ -367,23 +387,21 @@ export default function CACFollowUpPage() {
 
   return (
     <div className="page-container space-y-6">
-      {/* En‑tête avec le sélecteur de type de mission */}
+      {/* En‑tête */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">
+          <h1 className="text-2xl font-bold text-white">
             Suivi des missions CAC
           </h1>
-          <p className="text-slate-500 text-sm mt-0.5">
+          <p className="text-slate-300 text-sm mt-0.5">
             {selectedCountry.flag} {selectedCountry.name} · TABLEAU DE SUIVI
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {/* Utilisation de votre composant MissionTypeSelector existant */}
           <MissionTypeSelector
             selected={missionTypeId}
             onChange={(id: number) => {
               setMissionTypeId(id);
-              // Le rechargement se fera automatiquement via le useEffect
             }}
           />
           <button
@@ -396,7 +414,15 @@ export default function CACFollowUpPage() {
         </div>
       </div>
 
-      {/* Cartes de statistiques */}
+      {/* Affichage d'erreur */}
+      {error && (
+        <div className="p-3 bg-red-100 text-red-700 rounded-md border border-red-300 text-sm">
+          <AlertCircle className="inline-block w-4 h-4 mr-1" />
+          {error}
+        </div>
+      )}
+
+      {/* Cartes statistiques */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           {
@@ -439,11 +465,11 @@ export default function CACFollowUpPage() {
         ))}
       </div>
 
-      {/* Basculer graphiques + bouton sauvegarder */}
+      {/* Boutons graphiques + sauvegarde */}
       <div className="flex items-center justify-between">
         <button
           onClick={() => setShowCharts(!showCharts)}
-          className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-800 transition-colors"
+          className="flex items-center gap-2 text-sm font-medium text-slate-300 hover:text-white transition-colors"
         >
           {showCharts ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
           Graphiques
@@ -543,7 +569,7 @@ export default function CACFollowUpPage() {
         </div>
       )}
 
-      {/* Tableau principal */}
+      {/* Tableau principal avec comboboxes */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-x-auto">
         <table className="w-full text-xs border-collapse min-w-[800px]">
           <thead>
@@ -590,6 +616,17 @@ export default function CACFollowUpPage() {
               ))}
             </tr>
           </thead>
+
+          {/* Datalist pour les responsables */}
+          <datalist id="teamMembersList">
+            <option value="">--</option>
+            {teamMembers.map((m) => (
+              <option key={m.initials} value={m.initials}>
+                {m.full_name}
+              </option>
+            ))}
+          </datalist>
+
           <tbody>
             {categories.map((cat) => {
               const catTasks = tasksByCategory[cat] || [];
@@ -656,8 +693,11 @@ export default function CACFollowUpPage() {
                           return (
                             <td key={c.id} className="px-1 py-1">
                               <div className="flex gap-0.5">
+                                {/* Production - combobox */}
                                 <div className="flex-1">
-                                  <select
+                                  <input
+                                    type="text"
+                                    list="teamMembersList"
                                     value={cell.production}
                                     onChange={(e) =>
                                       updateCell(
@@ -666,21 +706,15 @@ export default function CACFollowUpPage() {
                                         e.target.value,
                                       )
                                     }
-                                    className={`w-full text-[10px] rounded px-1 py-1.5 border-0 ${bgP} ${txtP} cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-400`}
-                                  >
-                                    <option value="">--</option>
-                                    {teamMembers.map((m) => (
-                                      <option
-                                        key={m.initials}
-                                        value={m.initials}
-                                      >
-                                        {m.initials}
-                                      </option>
-                                    ))}
-                                  </select>
+                                    className={`w-full text-[10px] rounded px-1 py-1.5 border-0 ${bgP} ${txtP} focus:outline-none focus:ring-1 focus:ring-blue-400`}
+                                    placeholder="--"
+                                  />
                                 </div>
+                                {/* Supervision - combobox */}
                                 <div className="flex-1">
-                                  <select
+                                  <input
+                                    type="text"
+                                    list="teamMembersList"
                                     value={cell.supervision}
                                     onChange={(e) =>
                                       updateCell(
@@ -689,18 +723,9 @@ export default function CACFollowUpPage() {
                                         e.target.value,
                                       )
                                     }
-                                    className={`w-full text-[10px] rounded px-1 py-1.5 border-0 ${bgS} ${txtS} cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-400`}
-                                  >
-                                    <option value="">--</option>
-                                    {teamMembers.map((m) => (
-                                      <option
-                                        key={m.initials}
-                                        value={m.initials}
-                                      >
-                                        {m.initials}
-                                      </option>
-                                    ))}
-                                  </select>
+                                    className={`w-full text-[10px] rounded px-1 py-1.5 border-0 ${bgS} ${txtS} focus:outline-none focus:ring-1 focus:ring-blue-400`}
+                                    placeholder="--"
+                                  />
                                 </div>
                               </div>
                               <div className="flex gap-0.5 mt-0.5">

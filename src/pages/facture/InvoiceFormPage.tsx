@@ -66,6 +66,12 @@ export default function InvoiceFormPage() {
     let cancelled = false;
 
     const load = async () => {
+      // ⚠️ Attendre que l'utilisateur soit authentifié
+      if (!user) {
+        setInitializing(false);
+        return;
+      }
+
       setInitializing(true);
       setError(null);
 
@@ -144,7 +150,7 @@ export default function InvoiceFormPage() {
     return () => {
       cancelled = true;
     };
-  }, [invoiceId]);
+  }, [invoiceId, user]); // ✅ Ajout de "user" comme dépendance
 
   useEffect(() => {
     if (!invoiceId && firstName && invoiceDate) {

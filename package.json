@@ -12,7 +12,8 @@
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.5.1",
-    "@supabase/supabase-js": "^2.57.4",
+    "@supabase/auth-js": "^2.110.1",
+    "@supabase/supabase-js": "^2.110.1",
     "date-fns": "^4.4.0",
     "exceljs": "^4.4.0",
     "file-saver": "^2.0.5",

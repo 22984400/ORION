@@ -2,6 +2,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import styled from "styled-components";
 import { supabase } from "../../lib/supabase";
+import { upsertManualToolContent } from "../../lib/manualToolPersistence";
 import * as mammoth from "mammoth";
 
 // ==================== STYLES (identiques aux autres composants) ====================
@@ -326,12 +327,11 @@ const NoteSynthèse: React.FC = () => {
         console.warn("Warnings lors de la conversion:", warnings);
       }
 
-      const { error: updateError } = await supabase
-        .from("outils_manuel")
-        .update({ contenu: htmlContent })
-        .eq("code", OUTIL_CODE);
-
-      if (updateError) throw updateError;
+      await upsertManualToolContent({
+        code: OUTIL_CODE,
+        contenu: htmlContent,
+        titre: "Note de synthèse",
+      });
 
       setContent(htmlContent);
       setSuccess("La note de synthèse a été importée avec succès !");

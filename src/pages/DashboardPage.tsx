@@ -24,7 +24,7 @@ import type {
   FixedAsset,
   LeaveRequest,
 } from "../types";
-
+import { abbreviateNumber } from "../lib/utils";
 // Types pour les tables supplémentaires
 interface StockItem {
   remaining_value: number;
@@ -66,13 +66,13 @@ export function DashboardPage() {
   const handleQuickAction = (actionId: string) => {
     switch (actionId) {
       case "new-engagement":
-        navigate("/engagements/new");
+        navigate("/engagements");
         break;
       case "new-finding":
-        navigate("/findings/new");
+        navigate("/findings");
         break;
       case "stock-in":
-        navigate("/stock/in");
+        navigate("/stock");
         break;
       case "request-leave":
         navigate("/leave/request");
@@ -82,6 +82,12 @@ export function DashboardPage() {
         break;
       case "new-expense":
         navigate("/note-de-frais");
+        break;
+      case "new-collaborateur":
+        navigate("/collaborateurs");
+        break;
+      case "new-invoice":
+        navigate("/factures");
         break;
       default:
         console.warn("Action non reconnue :", actionId);
@@ -274,7 +280,7 @@ export function DashboardPage() {
       {
         id: "inventory-value",
         label: "Valeur des stocks",
-        value: formatCurrency(inventoryValue),
+        value: abbreviateNumber(inventoryValue), // au lieu de formatCurrency(inventoryValue)
         change: 5.2,
         changeLabel: "vs mois dernier",
         trend: "up" as const,
@@ -297,6 +303,16 @@ export function DashboardPage() {
         changeLabel: "vs mois dernier",
         trend: "up" as const,
         color: "primary" as const,
+      },
+
+      {
+        id: "asset-value",
+        label: "Valeur des immobilisations",
+        value: abbreviateNumber(assetValue),
+        change: -2.1,
+        changeLabel: "amortissement",
+        trend: "down" as const,
+        color: "cyan" as const,
       },
     ],
     [

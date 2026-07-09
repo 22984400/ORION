@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { Plus, Search, Edit2, Trash2, X, Check } from "lucide-react";
 import { supabase } from "../../lib/supabase";
+import { useAuth } from "../../contexts/AuthContext";
 import { useCountry } from "../../contexts/CountryContext";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { EmptyState } from "../../components/ui/EmptyState";
@@ -51,6 +52,7 @@ type Client = {
 type ModalState = { open: boolean; client: Partial<Client> | null };
 
 export default function ClientsPage() {
+  const { user } = useAuth();
   const { selectedCountry } = useCountry();
   const [clients, setClients] = useState<Client[]>([]);
   const [search, setSearch] = useState("");
@@ -62,9 +64,13 @@ export default function ClientsPage() {
     "general" | "juridiques" | "fiscales" | "sociales"
   >("general");
 
-  // ✅ No more withTimeout – direct calls
-
   const load = async () => {
+    // ⚠️ Attendre que l'utilisateur soit authentifié
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError("");
     try {
@@ -88,7 +94,7 @@ export default function ClientsPage() {
 
   useEffect(() => {
     load();
-  }, [selectedCountry.code]);
+  }, [selectedCountry.code, user]); // ✅ Ajout de "user" comme dépendance
 
   const filtered = clients.filter(
     (c) =>
@@ -333,7 +339,7 @@ export default function ClientsPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Rechercher par nom, code client ou gérant..."
-            className="auth-input w-full pl-10 pr-4 py-2.5"
+            className="auth-input w-full pl-10 pr-4 py-2.5 text-white bg-slate-800 border-slate-600 focus:border-primary-500"
           />
         </div>
       </div>
@@ -435,7 +441,7 @@ export default function ClientsPage() {
         )}
       </div>
 
-      {/* Modal d’ajout / modification */}
+      {/* Modal d’ajout / modification (conserve le même contenu) */}
       {modal.open && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">

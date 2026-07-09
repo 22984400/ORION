@@ -5,6 +5,7 @@ import styled from "styled-components";
 import { supabase } from "../../lib/supabase";
 import { format, differenceInYears } from "date-fns";
 import { fr } from "date-fns/locale";
+import { useAuth } from "../../contexts/AuthContext"; // Ajout de useAuth
 
 // ==================== STYLES ====================
 const Container = styled.div`
@@ -75,7 +76,9 @@ const Field = styled.div`
     text-transform: uppercase;
     letter-spacing: 0.5px;
   }
-  input, select, textarea {
+  input,
+  select,
+  textarea {
     padding: 8px 12px;
     border: 1px solid #334155;
     border-radius: 6px;
@@ -85,6 +88,9 @@ const Field = styled.div`
     &:focus {
       outline: none;
       border-color: #4facfe;
+    }
+    &::placeholder {
+      color: #64748b;
     }
   }
   textarea {
@@ -143,7 +149,9 @@ const FileInput = styled.input`
   display: none;
 `;
 
-const Button = styled.button<{ variant?: "primary" | "secondary" | "danger" | "success" }>`
+const Button = styled.button<{
+  variant?: "primary" | "secondary" | "danger" | "success";
+}>`
   padding: 6px 14px;
   border: none;
   border-radius: 4px;
@@ -257,11 +265,14 @@ interface Score {
 }
 
 const CollaborateurFiche: React.FC = () => {
+  const { user } = useAuth(); // Récupération de l'utilisateur
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const isNew = id === "new" || !id;
 
-  const [collaborateur, setCollaborateur] = useState<Partial<Collaborateur>>({});
+  const [collaborateur, setCollaborateur] = useState<Partial<Collaborateur>>(
+    {},
+  );
   const [formations, setFormations] = useState<Formation[]>([]);
   const [disciplines, setDisciplines] = useState<Discipline[]>([]);
   const [scores, setScores] = useState<Score[]>([]);
@@ -271,15 +282,29 @@ const CollaborateurFiche: React.FC = () => {
   const [age, setAge] = useState<number | null>(null);
 
   // Nouvelle formation
-  const [newFormation, setNewFormation] = useState({ titre: "", etablissement: "", date_obtention: "" });
+  const [newFormation, setNewFormation] = useState({
+    titre: "",
+    etablissement: "",
+    date_obtention: "",
+  });
   // Nouvelle discipline
-  const [newDiscipline, setNewDiscipline] = useState({ date: "", description: "", document_url: "" });
+  const [newDiscipline, setNewDiscipline] = useState({
+    date: "",
+    description: "",
+    document_url: "",
+  });
 
   const photoInputRef = useRef<HTMLInputElement>(null);
   const cvInputRef = useRef<HTMLInputElement>(null);
   const cniInputRef = useRef<HTMLInputElement>(null);
 
   const loadData = async () => {
+    // ⚠️ Attendre que l'utilisateur soit authentifié
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
     if (isNew) return;
     try {
       setLoading(true);
@@ -293,7 +318,10 @@ const CollaborateurFiche: React.FC = () => {
 
       // Calculer l'âge
       if (collab.date_naissance) {
-        const age = differenceInYears(new Date(), new Date(collab.date_naissance));
+        const age = differenceInYears(
+          new Date(),
+          new Date(collab.date_naissance),
+        );
         setAge(age);
       }
 
@@ -331,12 +359,15 @@ const CollaborateurFiche: React.FC = () => {
 
   useEffect(() => {
     loadData();
-  }, [id]);
+  }, [id, user]); // ✅ Ajout de "user" comme dépendance
 
   // Calculer l'âge quand la date de naissance change
   useEffect(() => {
     if (collaborateur.date_naissance) {
-      const age = differenceInYears(new Date(), new Date(collaborateur.date_naissance));
+      const age = differenceInYears(
+        new Date(),
+        new Date(collaborateur.date_naissance),
+      );
       setAge(age);
     } else {
       setAge(null);
@@ -347,7 +378,10 @@ const CollaborateurFiche: React.FC = () => {
     setCollaborateur({ ...collaborateur, [field]: value });
   };
 
-  const handleUpload = async (field: "photo_url" | "cv_url" | "cni_url", file: File) => {
+  const handleUpload = async (
+    field: "photo_url" | "cv_url" | "cni_url",
+    file: File,
+  ) => {
     try {
       const fileExt = file.name.split(".").pop();
       const fileName = `${Date.now()}_${field}.${fileExt}`;
@@ -410,12 +444,14 @@ const CollaborateurFiche: React.FC = () => {
     try {
       const { data, error } = await supabase
         .from("formations")
-        .insert([{
-          collaborateur_id: id,
-          titre: newFormation.titre,
-          etablissement: newFormation.etablissement,
-          date_obtention: newFormation.date_obtention || null,
-        }])
+        .insert([
+          {
+            collaborateur_id: id,
+            titre: newFormation.titre,
+            etablissement: newFormation.etablissement,
+            date_obtention: newFormation.date_obtention || null,
+          },
+        ])
         .select()
         .single();
       if (error) throw error;
@@ -430,7 +466,7 @@ const CollaborateurFiche: React.FC = () => {
     if (!window.confirm("Supprimer cette formation ?")) return;
     try {
       await supabase.from("formations").delete().eq("id", formationId);
-      setFormations(formations.filter(f => f.id !== formationId));
+      setFormations(formations.filter((f) => f.id !== formationId));
     } catch (err) {
       alert("Erreur suppression");
     }
@@ -441,12 +477,14 @@ const CollaborateurFiche: React.FC = () => {
     try {
       const { data, error } = await supabase
         .from("disciplines")
-        .insert([{
-          collaborateur_id: id,
-          date: newDiscipline.date || new Date().toISOString().split("T")[0],
-          description: newDiscipline.description,
-          document_url: newDiscipline.document_url || null,
-        }])
+        .insert([
+          {
+            collaborateur_id: id,
+            date: newDiscipline.date || new Date().toISOString().split("T")[0],
+            description: newDiscipline.description,
+            document_url: newDiscipline.document_url || null,
+          },
+        ])
         .select()
         .single();
       if (error) throw error;
@@ -461,14 +499,18 @@ const CollaborateurFiche: React.FC = () => {
     if (!window.confirm("Supprimer cette sanction ?")) return;
     try {
       await supabase.from("disciplines").delete().eq("id", disciplineId);
-      setDisciplines(disciplines.filter(d => d.id !== disciplineId));
+      setDisciplines(disciplines.filter((d) => d.id !== disciplineId));
     } catch (err) {
       alert("Erreur suppression");
     }
   };
 
   if (loading) {
-    return <LoadingContainer><i className="fas fa-spinner fa-spin"></i> Chargement...</LoadingContainer>;
+    return (
+      <LoadingContainer>
+        <i className="fas fa-spinner fa-spin"></i> Chargement...
+      </LoadingContainer>
+    );
   }
 
   return (
@@ -476,10 +518,15 @@ const CollaborateurFiche: React.FC = () => {
       <Header>
         <HeaderTitle>
           <i className="fas fa-user"></i>
-          {isNew ? "Nouveau collaborateur" : `${collaborateur.prenom || ""} ${collaborateur.nom || ""}`}
+          {isNew
+            ? "Nouveau collaborateur"
+            : `${collaborateur.prenom || ""} ${collaborateur.nom || ""}`}
         </HeaderTitle>
         <div style={{ display: "flex", gap: "8px" }}>
-          <Button variant="secondary" onClick={() => navigate("/collaborateurs")}>
+          <Button
+            variant="secondary"
+            onClick={() => navigate("/collaborateurs")}
+          >
             <i className="fas fa-arrow-left"></i> Retour
           </Button>
           <Button variant="primary" onClick={handleSubmit} disabled={saving}>
@@ -491,18 +538,25 @@ const CollaborateurFiche: React.FC = () => {
       <form onSubmit={handleSubmit}>
         {/* ===== SECTION PERSONNELLE ===== */}
         <Section>
-          <SectionTitle><i className="fas fa-id-card"></i> Informations personnelles</SectionTitle>
+          <SectionTitle>
+            <i className="fas fa-id-card"></i> Informations personnelles
+          </SectionTitle>
 
           <PhotoSection>
             <PhotoPreview>
               {collaborateur.photo_url ? (
                 <img src={collaborateur.photo_url} alt="Photo" />
               ) : (
-                <span className="placeholder"><i className="fas fa-user-circle"></i></span>
+                <span className="placeholder">
+                  <i className="fas fa-user-circle"></i>
+                </span>
               )}
             </PhotoPreview>
             <div>
-              <UploadButton type="button" onClick={() => photoInputRef.current?.click()}>
+              <UploadButton
+                type="button"
+                onClick={() => photoInputRef.current?.click()}
+              >
                 <i className="fas fa-upload"></i> Importer une photo
               </UploadButton>
               <FileInput
@@ -510,11 +564,16 @@ const CollaborateurFiche: React.FC = () => {
                 type="file"
                 accept="image/*"
                 onChange={(e) => {
-                  if (e.target.files?.[0]) handleUpload("photo_url", e.target.files[0]);
+                  if (e.target.files?.[0])
+                    handleUpload("photo_url", e.target.files[0]);
                 }}
               />
               {collaborateur.photo_url && (
-                <Button variant="danger" type="button" onClick={() => handleChange("photo_url", "")}>
+                <Button
+                  variant="danger"
+                  type="button"
+                  onClick={() => handleChange("photo_url", "")}
+                >
                   Supprimer
                 </Button>
               )}
@@ -524,15 +583,25 @@ const CollaborateurFiche: React.FC = () => {
           <Grid>
             <Field>
               <label>Nom *</label>
-              <input value={collaborateur.nom || ""} onChange={(e) => handleChange("nom", e.target.value)} />
+              <input
+                value={collaborateur.nom || ""}
+                onChange={(e) => handleChange("nom", e.target.value)}
+              />
             </Field>
             <Field>
               <label>Prénom *</label>
-              <input value={collaborateur.prenom || ""} onChange={(e) => handleChange("prenom", e.target.value)} />
+              <input
+                value={collaborateur.prenom || ""}
+                onChange={(e) => handleChange("prenom", e.target.value)}
+              />
             </Field>
             <Field>
               <label>Date de naissance</label>
-              <input type="date" value={collaborateur.date_naissance || ""} onChange={(e) => handleChange("date_naissance", e.target.value)} />
+              <input
+                type="date"
+                value={collaborateur.date_naissance || ""}
+                onChange={(e) => handleChange("date_naissance", e.target.value)}
+              />
             </Field>
             <Field>
               <label>Âge</label>
@@ -540,11 +609,17 @@ const CollaborateurFiche: React.FC = () => {
             </Field>
             <Field>
               <label>Lieu de naissance</label>
-              <input value={collaborateur.lieu_naissance || ""} onChange={(e) => handleChange("lieu_naissance", e.target.value)} />
+              <input
+                value={collaborateur.lieu_naissance || ""}
+                onChange={(e) => handleChange("lieu_naissance", e.target.value)}
+              />
             </Field>
             <Field>
               <label>Sexe</label>
-              <select value={collaborateur.sexe || ""} onChange={(e) => handleChange("sexe", e.target.value)}>
+              <select
+                value={collaborateur.sexe || ""}
+                onChange={(e) => handleChange("sexe", e.target.value)}
+              >
                 <option value="">--</option>
                 <option value="M">Masculin</option>
                 <option value="F">Féminin</option>
@@ -555,49 +630,84 @@ const CollaborateurFiche: React.FC = () => {
 
         {/* ===== SECTION PROFESSIONNELLE ===== */}
         <Section>
-          <SectionTitle><i className="fas fa-briefcase"></i> Informations professionnelles</SectionTitle>
+          <SectionTitle>
+            <i className="fas fa-briefcase"></i> Informations professionnelles
+          </SectionTitle>
           <Grid>
             <Field>
               <label>Fonction / Poste</label>
-              <input value={collaborateur.fonction || ""} onChange={(e) => handleChange("fonction", e.target.value)} />
+              <input
+                value={collaborateur.fonction || ""}
+                onChange={(e) => handleChange("fonction", e.target.value)}
+              />
             </Field>
             <Field>
               <label>Pays</label>
-              <input value={collaborateur.pays || ""} onChange={(e) => handleChange("pays", e.target.value)} />
+              <input
+                value={collaborateur.pays || ""}
+                onChange={(e) => handleChange("pays", e.target.value)}
+              />
             </Field>
             <Field>
               <label>Bureau</label>
-              <input value={collaborateur.bureau || ""} onChange={(e) => handleChange("bureau", e.target.value)} />
+              <input
+                value={collaborateur.bureau || ""}
+                onChange={(e) => handleChange("bureau", e.target.value)}
+              />
             </Field>
             <Field>
               <label>Date d'embauche</label>
-              <input type="date" value={collaborateur.date_embauche || ""} onChange={(e) => handleChange("date_embauche", e.target.value)} />
+              <input
+                type="date"
+                value={collaborateur.date_embauche || ""}
+                onChange={(e) => handleChange("date_embauche", e.target.value)}
+              />
             </Field>
             <Field>
               <label>Date de départ</label>
-              <input type="date" value={collaborateur.date_depart || ""} onChange={(e) => handleChange("date_depart", e.target.value)} />
+              <input
+                type="date"
+                value={collaborateur.date_depart || ""}
+                onChange={(e) => handleChange("date_depart", e.target.value)}
+              />
             </Field>
           </Grid>
         </Section>
 
         {/* ===== SECTION DOCUMENTS ===== */}
         <Section>
-          <SectionTitle><i className="fas fa-paperclip"></i> Documents</SectionTitle>
+          <SectionTitle>
+            <i className="fas fa-paperclip"></i> Documents
+          </SectionTitle>
           <Grid>
             <Field>
               <label>CV</label>
-              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              <div
+                style={{ display: "flex", gap: "8px", alignItems: "center" }}
+              >
                 {collaborateur.cv_url ? (
                   <>
-                    <a href={collaborateur.cv_url} target="_blank" rel="noopener noreferrer" style={{ color: "#4facfe" }}>
+                    <a
+                      href={collaborateur.cv_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: "#4facfe" }}
+                    >
                       <i className="fas fa-file-pdf"></i> Voir le CV
                     </a>
-                    <Button variant="danger" type="button" onClick={() => handleChange("cv_url", "")}>
+                    <Button
+                      variant="danger"
+                      type="button"
+                      onClick={() => handleChange("cv_url", "")}
+                    >
                       Supprimer
                     </Button>
                   </>
                 ) : (
-                  <UploadButton type="button" onClick={() => cvInputRef.current?.click()}>
+                  <UploadButton
+                    type="button"
+                    onClick={() => cvInputRef.current?.click()}
+                  >
                     <i className="fas fa-upload"></i> Importer
                   </UploadButton>
                 )}
@@ -606,25 +716,40 @@ const CollaborateurFiche: React.FC = () => {
                   type="file"
                   accept=".pdf,.doc,.docx"
                   onChange={(e) => {
-                    if (e.target.files?.[0]) handleUpload("cv_url", e.target.files[0]);
+                    if (e.target.files?.[0])
+                      handleUpload("cv_url", e.target.files[0]);
                   }}
                 />
               </div>
             </Field>
             <Field>
               <label>CNI</label>
-              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              <div
+                style={{ display: "flex", gap: "8px", alignItems: "center" }}
+              >
                 {collaborateur.cni_url ? (
                   <>
-                    <a href={collaborateur.cni_url} target="_blank" rel="noopener noreferrer" style={{ color: "#4facfe" }}>
+                    <a
+                      href={collaborateur.cni_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: "#4facfe" }}
+                    >
                       <i className="fas fa-file-pdf"></i> Voir la CNI
                     </a>
-                    <Button variant="danger" type="button" onClick={() => handleChange("cni_url", "")}>
+                    <Button
+                      variant="danger"
+                      type="button"
+                      onClick={() => handleChange("cni_url", "")}
+                    >
                       Supprimer
                     </Button>
                   </>
                 ) : (
-                  <UploadButton type="button" onClick={() => cniInputRef.current?.click()}>
+                  <UploadButton
+                    type="button"
+                    onClick={() => cniInputRef.current?.click()}
+                  >
                     <i className="fas fa-upload"></i> Importer
                   </UploadButton>
                 )}
@@ -633,7 +758,8 @@ const CollaborateurFiche: React.FC = () => {
                   type="file"
                   accept=".pdf,.jpg,.png"
                   onChange={(e) => {
-                    if (e.target.files?.[0]) handleUpload("cni_url", e.target.files[0]);
+                    if (e.target.files?.[0])
+                      handleUpload("cni_url", e.target.files[0]);
                   }}
                 />
               </div>
@@ -643,25 +769,66 @@ const CollaborateurFiche: React.FC = () => {
 
         {/* ===== FORMATIONS ===== */}
         <Section>
-          <SectionTitle><i className="fas fa-graduation-cap"></i> Formations et diplômes</SectionTitle>
-          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "12px" }}>
+          <SectionTitle>
+            <i className="fas fa-graduation-cap"></i> Formations et diplômes
+          </SectionTitle>
+          <div
+            style={{
+              display: "flex",
+              gap: "8px",
+              flexWrap: "wrap",
+              marginBottom: "12px",
+            }}
+          >
             <input
               placeholder="Titre"
               value={newFormation.titre}
-              onChange={(e) => setNewFormation({ ...newFormation, titre: e.target.value })}
-              style={{ padding: "6px 10px", border: "1px solid #334155", borderRadius: "4px", background: "#0f172a", color: "#e2e8f0", flex: 1 }}
+              onChange={(e) =>
+                setNewFormation({ ...newFormation, titre: e.target.value })
+              }
+              style={{
+                padding: "6px 10px",
+                border: "1px solid #334155",
+                borderRadius: "4px",
+                background: "#0f172a",
+                color: "#e2e8f0",
+                flex: 1,
+              }}
             />
             <input
               placeholder="Établissement"
               value={newFormation.etablissement}
-              onChange={(e) => setNewFormation({ ...newFormation, etablissement: e.target.value })}
-              style={{ padding: "6px 10px", border: "1px solid #334155", borderRadius: "4px", background: "#0f172a", color: "#e2e8f0", flex: 1 }}
+              onChange={(e) =>
+                setNewFormation({
+                  ...newFormation,
+                  etablissement: e.target.value,
+                })
+              }
+              style={{
+                padding: "6px 10px",
+                border: "1px solid #334155",
+                borderRadius: "4px",
+                background: "#0f172a",
+                color: "#e2e8f0",
+                flex: 1,
+              }}
             />
             <input
               type="date"
               value={newFormation.date_obtention}
-              onChange={(e) => setNewFormation({ ...newFormation, date_obtention: e.target.value })}
-              style={{ padding: "6px 10px", border: "1px solid #334155", borderRadius: "4px", background: "#0f172a", color: "#e2e8f0" }}
+              onChange={(e) =>
+                setNewFormation({
+                  ...newFormation,
+                  date_obtention: e.target.value,
+                })
+              }
+              style={{
+                padding: "6px 10px",
+                border: "1px solid #334155",
+                borderRadius: "4px",
+                background: "#0f172a",
+                color: "#e2e8f0",
+              }}
             />
             <Button variant="success" type="button" onClick={addFormation}>
               <i className="fas fa-plus"></i> Ajouter
@@ -671,15 +838,27 @@ const CollaborateurFiche: React.FC = () => {
             {formations.map((f) => (
               <li key={f.id}>
                 <span className="info">
-                  <strong>{f.titre}</strong> – {f.etablissement} {f.date_obtention && `(${format(new Date(f.date_obtention), "dd/MM/yyyy")})`}
+                  <strong>{f.titre}</strong> – {f.etablissement}{" "}
+                  {f.date_obtention &&
+                    `(${format(new Date(f.date_obtention), "dd/MM/yyyy")})`}
                 </span>
-                <Button variant="danger" type="button" onClick={() => deleteFormation(f.id)}>
+                <Button
+                  variant="danger"
+                  type="button"
+                  onClick={() => deleteFormation(f.id)}
+                >
                   <i className="fas fa-trash"></i>
                 </Button>
               </li>
             ))}
             {formations.length === 0 && (
-              <li style={{ color: "#94a3b8", textAlign: "center", padding: "12px" }}>
+              <li
+                style={{
+                  color: "#94a3b8",
+                  textAlign: "center",
+                  padding: "12px",
+                }}
+              >
                 Aucune formation enregistrée
               </li>
             )}
@@ -688,25 +867,66 @@ const CollaborateurFiche: React.FC = () => {
 
         {/* ===== DISCIPLINE ===== */}
         <Section>
-          <SectionTitle><i className="fas fa-gavel"></i> Discipline (sanctions)</SectionTitle>
-          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "12px" }}>
+          <SectionTitle>
+            <i className="fas fa-gavel"></i> Discipline (sanctions)
+          </SectionTitle>
+          <div
+            style={{
+              display: "flex",
+              gap: "8px",
+              flexWrap: "wrap",
+              marginBottom: "12px",
+            }}
+          >
             <input
               type="date"
               value={newDiscipline.date}
-              onChange={(e) => setNewDiscipline({ ...newDiscipline, date: e.target.value })}
-              style={{ padding: "6px 10px", border: "1px solid #334155", borderRadius: "4px", background: "#0f172a", color: "#e2e8f0" }}
+              onChange={(e) =>
+                setNewDiscipline({ ...newDiscipline, date: e.target.value })
+              }
+              style={{
+                padding: "6px 10px",
+                border: "1px solid #334155",
+                borderRadius: "4px",
+                background: "#0f172a",
+                color: "#e2e8f0",
+              }}
             />
             <input
               placeholder="Description"
               value={newDiscipline.description}
-              onChange={(e) => setNewDiscipline({ ...newDiscipline, description: e.target.value })}
-              style={{ padding: "6px 10px", border: "1px solid #334155", borderRadius: "4px", background: "#0f172a", color: "#e2e8f0", flex: 2 }}
+              onChange={(e) =>
+                setNewDiscipline({
+                  ...newDiscipline,
+                  description: e.target.value,
+                })
+              }
+              style={{
+                padding: "6px 10px",
+                border: "1px solid #334155",
+                borderRadius: "4px",
+                background: "#0f172a",
+                color: "#e2e8f0",
+                flex: 2,
+              }}
             />
             <input
               placeholder="Lien pièce jointe (optionnel)"
               value={newDiscipline.document_url}
-              onChange={(e) => setNewDiscipline({ ...newDiscipline, document_url: e.target.value })}
-              style={{ padding: "6px 10px", border: "1px solid #334155", borderRadius: "4px", background: "#0f172a", color: "#e2e8f0", flex: 1 }}
+              onChange={(e) =>
+                setNewDiscipline({
+                  ...newDiscipline,
+                  document_url: e.target.value,
+                })
+              }
+              style={{
+                padding: "6px 10px",
+                border: "1px solid #334155",
+                borderRadius: "4px",
+                background: "#0f172a",
+                color: "#e2e8f0",
+                flex: 1,
+              }}
             />
             <Button variant="success" type="button" onClick={addDiscipline}>
               <i className="fas fa-plus"></i> Ajouter
@@ -716,20 +936,36 @@ const CollaborateurFiche: React.FC = () => {
             {disciplines.map((d) => (
               <li key={d.id}>
                 <span className="info">
-                  <strong>{format(new Date(d.date), "dd/MM/yyyy")}</strong> – {d.description}
+                  <strong>{format(new Date(d.date), "dd/MM/yyyy")}</strong> –{" "}
+                  {d.description}
                   {d.document_url && (
-                    <a href={d.document_url} target="_blank" rel="noopener noreferrer" style={{ marginLeft: "8px", color: "#4facfe" }}>
+                    <a
+                      href={d.document_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ marginLeft: "8px", color: "#4facfe" }}
+                    >
                       <i className="fas fa-paperclip"></i>
                     </a>
                   )}
                 </span>
-                <Button variant="danger" type="button" onClick={() => deleteDiscipline(d.id)}>
+                <Button
+                  variant="danger"
+                  type="button"
+                  onClick={() => deleteDiscipline(d.id)}
+                >
                   <i className="fas fa-trash"></i>
                 </Button>
               </li>
             ))}
             {disciplines.length === 0 && (
-              <li style={{ color: "#94a3b8", textAlign: "center", padding: "12px" }}>
+              <li
+                style={{
+                  color: "#94a3b8",
+                  textAlign: "center",
+                  padding: "12px",
+                }}
+              >
                 Aucune sanction enregistrée
               </li>
             )}
@@ -738,38 +974,86 @@ const CollaborateurFiche: React.FC = () => {
 
         {/* ===== ÉVALUATIONS (placeholder) ===== */}
         <Section>
-          <SectionTitle><i className="fas fa-chart-line"></i> Évaluations</SectionTitle>
-          <div style={{ color: "#94a3b8", textAlign: "center", padding: "20px", background: "#0f172a", borderRadius: "8px" }}>
-            <i className="fas fa-code" style={{ fontSize: "32px", display: "block", marginBottom: "12px", color: "#475569" }}></i>
+          <SectionTitle>
+            <i className="fas fa-chart-line"></i> Évaluations
+          </SectionTitle>
+          <div
+            style={{
+              color: "#94a3b8",
+              textAlign: "center",
+              padding: "20px",
+              background: "#0f172a",
+              borderRadius: "8px",
+            }}
+          >
+            <i
+              className="fas fa-code"
+              style={{
+                fontSize: "32px",
+                display: "block",
+                marginBottom: "12px",
+                color: "#475569",
+              }}
+            ></i>
             <p>Module d'évaluations interne à venir</p>
-            <p style={{ fontSize: "13px", marginTop: "4px" }}>Cette section permettra de gérer les évaluations périodiques des collaborateurs.</p>
+            <p style={{ fontSize: "13px", marginTop: "4px" }}>
+              Cette section permettra de gérer les évaluations périodiques des
+              collaborateurs.
+            </p>
           </div>
         </Section>
 
         {/* ===== SCORES ===== */}
         <Section>
-          <SectionTitle><i className="fas fa-star"></i> Scores</SectionTitle>
+          <SectionTitle>
+            <i className="fas fa-star"></i> Scores
+          </SectionTitle>
           <ScoreGrid>
             {scores.length > 0 ? (
               <>
                 <div className="score-item">
-                  <div className="value">{scores[0].score_mensuel?.toFixed(1) || "-"}</div>
+                  <div className="value">
+                    {scores[0].score_mensuel?.toFixed(1) || "-"}
+                  </div>
                   <div className="label">Mensuel</div>
                 </div>
                 <div className="score-item">
-                  <div className="value">{scores[0].score_trimestriel?.toFixed(1) || "-"}</div>
+                  <div className="value">
+                    {scores[0].score_trimestriel?.toFixed(1) || "-"}
+                  </div>
                   <div className="label">Trimestriel</div>
                 </div>
                 <div className="score-item">
-                  <div className="value">{scores[0].score_annuel?.toFixed(1) || "-"}</div>
+                  <div className="value">
+                    {scores[0].score_annuel?.toFixed(1) || "-"}
+                  </div>
                   <div className="label">Annuel</div>
                 </div>
-                <div className="score-item" style={{ gridColumn: "1 / -1", fontSize: "13px", color: "#94a3b8" }}>
-                  Dernière mise à jour : {scores[0].mois ? format(new Date(scores[0].mois), "MMMM yyyy", { locale: fr }) : "N/A"}
+                <div
+                  className="score-item"
+                  style={{
+                    gridColumn: "1 / -1",
+                    fontSize: "13px",
+                    color: "#94a3b8",
+                  }}
+                >
+                  Dernière mise à jour :{" "}
+                  {scores[0].mois
+                    ? format(new Date(scores[0].mois), "MMMM yyyy", {
+                        locale: fr,
+                      })
+                    : "N/A"}
                 </div>
               </>
             ) : (
-              <div style={{ color: "#94a3b8", textAlign: "center", padding: "12px", gridColumn: "1 / -1" }}>
+              <div
+                style={{
+                  color: "#94a3b8",
+                  textAlign: "center",
+                  padding: "12px",
+                  gridColumn: "1 / -1",
+                }}
+              >
                 Aucun score enregistré
               </div>
             )}

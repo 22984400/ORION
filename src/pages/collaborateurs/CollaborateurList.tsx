@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import styled from "styled-components";
 import { supabase } from "../../lib/supabase";
 import { format } from "date-fns";
+import { useAuth } from "../../contexts/AuthContext";
 
 const Container = styled.div`
   background: #0f172a;
@@ -119,27 +120,35 @@ interface Collaborateur {
 }
 
 export const CollaborateurList: React.FC = () => {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [collaborateurs, setCollaborateurs] = useState<Collaborateur[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const fetchData = async () => {
+    // ⚠️ Attendre que l'utilisateur soit authentifié
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("collaborateurs")
+        .select("id, nom, prenom, photo_url, fonction, pays, date_embauche")
+        .order("nom");
+      if (error) throw error;
+      setCollaborateurs(data || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const { data, error } = await supabase
-          .from("collaborateurs")
-          .select("id, nom, prenom, photo_url, fonction, pays, date_embauche")
-          .order("nom");
-        if (error) throw error;
-        setCollaborateurs(data || []);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchData();
-  }, []);
+  }, [user]); // ✅ Ajout de "user" comme dépendance
 
   if (loading) {
     return (

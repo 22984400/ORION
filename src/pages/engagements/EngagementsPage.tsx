@@ -1,3 +1,5 @@
+// src/pages/engagements/EngagementsPage.tsx
+
 import { useState, useEffect } from "react";
 import {
   Plus,
@@ -16,16 +18,17 @@ import { supabase } from "../../lib/supabase";
 import { addNotification } from "../../lib/notifications";
 import { MISSION_STATUS_CONFIG, URGENCY_CONFIG } from "../../lib/constants";
 import type { WeeklyMission, Client, Profile } from "../../types";
-import { useAuth } from "../../contexts/AuthContext"; // ← Ajout
+import { useAuth } from "../../contexts/AuthContext";
 
 export function EngagementsPage() {
-  const { user } = useAuth(); // ← Ajout
+  const { user } = useAuth();
   const [missions, setMissions] = useState<WeeklyMission[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const [showModal, setShowModal] = useState(false);
   const [editingMission, setEditingMission] = useState<WeeklyMission | null>(
@@ -33,6 +36,8 @@ export function EngagementsPage() {
   );
   const [form, setForm] = useState({
     date: new Date().toISOString().slice(0, 10),
+    start_date: "",
+    end_date: "",
     client_id: "",
     subject: "",
     objective: "",
@@ -59,7 +64,6 @@ export function EngagementsPage() {
 
   // Charger toutes les données
   const fetchData = async () => {
-    // ⚠️ Attendre que l'utilisateur soit authentifié
     if (!user) {
       setLoading(false);
       return;
@@ -67,7 +71,6 @@ export function EngagementsPage() {
 
     setLoading(true);
     try {
-      // Missions
       const { data: missionsData, error: missionsError } = await supabase
         .from("weekly_missions")
         .select("*")
@@ -75,7 +78,6 @@ export function EngagementsPage() {
       if (missionsError) throw missionsError;
       setMissions(missionsData || []);
 
-      // Clients
       const { data: clientsData, error: clientsError } = await supabase
         .from("clients")
         .select("id, name")
@@ -83,7 +85,6 @@ export function EngagementsPage() {
       if (clientsError) throw clientsError;
       setClients(clientsData || []);
 
-      // Responsables (profiles)
       const { data: profilesData, error: profilesError } = await supabase
         .from("profiles")
         .select("id, full_name")
@@ -99,7 +100,7 @@ export function EngagementsPage() {
 
   useEffect(() => {
     fetchData();
-  }, [user]); // ✅ Ajout de "user" comme dépendance
+  }, [user]);
 
   // Filtrage
   const filtered = missions.filter((m) => {
@@ -117,8 +118,12 @@ export function EngagementsPage() {
 
   // Sauvegarder la mission
   const handleSave = async () => {
+    const previousStatus = editingMission?.status || "";
+
     const payload = {
       date: form.date,
+      start_date: form.start_date || null,
+      end_date: form.end_date || null,
       client_id: form.client_id || null,
       subject: form.subject,
       objective: form.objective,
@@ -128,6 +133,7 @@ export function EngagementsPage() {
       comments: form.comments,
       progress: form.progress,
     };
+
     if (editingMission) {
       await supabase
         .from("weekly_missions")
@@ -136,28 +142,61 @@ export function EngagementsPage() {
     } else {
       await supabase.from("weekly_missions").insert([payload]);
     }
+
+    // Notifications selon le changement de statut
+    const newStatus = form.status;
+    if (previousStatus !== newStatus) {
+      if (newStatus === "open") {
+        void addNotification({
+          title: "🚀 Mission démarrée",
+          message: `La mission "${form.subject}" a débuté.`,
+          type: "engagement",
+        });
+      } else if (newStatus === "closed") {
+        void addNotification({
+          title: "✅ Mission terminée",
+          message: `La mission "${form.subject}" est terminée.`,
+          type: "engagement",
+        });
+      }
+    }
+
     fetchData();
     setShowModal(false);
     setEditingMission(null);
   };
 
   // Supprimer
-  const handleDelete = async (id: string) => {
-    if (!confirm("Supprimer cette mission ?")) return;
-    const { error } = await supabase
-      .from("weekly_missions")
-      .delete()
-      .eq("id", id);
-    if (error) {
-      alert("Erreur lors de la suppression : " + error.message);
+  const handleDelete = async (id: string, subject: string) => {
+    if (
+      !confirm(
+        `Supprimer la mission "${subject}" ? Cette action est irréversible.`,
+      )
+    )
       return;
+
+    setDeletingId(id);
+    try {
+      const { error } = await supabase
+        .from("weekly_missions")
+        .delete()
+        .eq("id", id);
+      if (error) {
+        alert("Erreur lors de la suppression : " + error.message);
+        setDeletingId(null);
+        return;
+      }
+      void addNotification({
+        title: "Mission supprimée",
+        message: `La mission "${subject}" a été supprimée.`,
+        type: "engagement",
+      });
+      await fetchData();
+    } catch (err: any) {
+      alert("Erreur : " + err.message);
+    } finally {
+      setDeletingId(null);
     }
-    void addNotification({
-      title: "Mission supprimée",
-      message: "Une mission a été supprimée.",
-      type: "engagement",
-    });
-    fetchData();
   };
 
   // Ouvrir le formulaire d’édition
@@ -165,6 +204,8 @@ export function EngagementsPage() {
     setEditingMission(m);
     setForm({
       date: m.date,
+      start_date: m.start_date || "",
+      end_date: m.end_date || "",
       client_id: m.client_id || "",
       subject: m.subject,
       objective: m.objective || "",
@@ -200,7 +241,7 @@ export function EngagementsPage() {
     }
   };
 
-  // Ajout rapide d’un responsable (seulement dans profiles, sans auth)
+  // Ajout rapide d’un responsable
   const handleAddResponsible = async () => {
     const { data, error } = await supabase
       .from("profiles")
@@ -233,6 +274,8 @@ export function EngagementsPage() {
               setEditingMission(null);
               setForm({
                 date: new Date().toISOString().slice(0, 10),
+                start_date: "",
+                end_date: "",
                 client_id: "",
                 subject: "",
                 objective: "",
@@ -303,13 +346,23 @@ export function EngagementsPage() {
             );
             const responsibleName =
               responsibleProfile?.full_name || "Non assigné";
+
+            let dateDisplay = formatShortDate(mission.date);
+            if (mission.start_date && mission.end_date) {
+              dateDisplay = `${formatShortDate(mission.start_date)} → ${formatShortDate(mission.end_date)}`;
+            } else if (mission.start_date) {
+              dateDisplay = `Début : ${formatShortDate(mission.start_date)}`;
+            } else if (mission.end_date) {
+              dateDisplay = `Fin : ${formatShortDate(mission.end_date)}`;
+            }
+
             return (
               <div key={mission.id} className="card-hover p-5 group">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <Calendar className="w-4 h-4 text-slate-400" />
                     <span className="text-sm text-slate-300">
-                      {formatShortDate(mission.date)}
+                      {dateDisplay}
                     </span>
                   </div>
                   <Badge
@@ -378,10 +431,15 @@ export function EngagementsPage() {
                     Modifier
                   </button>
                   <button
-                    onClick={() => handleDelete(mission.id)}
-                    className="btn-ghost btn-sm gap-1 text-slate-400 hover:text-error-400"
+                    onClick={() => handleDelete(mission.id, mission.subject)}
+                    disabled={deletingId === mission.id}
+                    className="btn-ghost btn-sm gap-1 text-slate-400 hover:text-error-400 disabled:opacity-50"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    {deletingId === mission.id ? (
+                      <span className="w-3.5 h-3.5 border-2 border-slate-400/30 border-t-slate-400 rounded-full animate-spin" />
+                    ) : (
+                      <Trash2 className="w-3.5 h-3.5" />
+                    )}
                     Supprimer
                   </button>
                 </div>
@@ -411,18 +469,46 @@ export function EngagementsPage() {
               {editingMission ? "Modifier la mission" : "Nouvelle mission"}
             </h2>
             <div className="space-y-3">
-              <div>
-                <label className="text-xs text-slate-400 mb-1 block">
-                  Date
-                </label>
-                <input
-                  type="date"
-                  value={form.date}
-                  onChange={(e) =>
-                    setForm((p) => ({ ...p, date: e.target.value }))
-                  }
-                  className="input-md"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-slate-400 mb-1 block">
+                    Date
+                  </label>
+                  <input
+                    type="date"
+                    value={form.date}
+                    onChange={(e) =>
+                      setForm((p) => ({ ...p, date: e.target.value }))
+                    }
+                    className="input-md"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 mb-1 block">
+                    Début (optionnel)
+                  </label>
+                  <input
+                    type="date"
+                    value={form.start_date}
+                    onChange={(e) =>
+                      setForm((p) => ({ ...p, start_date: e.target.value }))
+                    }
+                    className="input-md"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 mb-1 block">
+                    Fin (optionnel)
+                  </label>
+                  <input
+                    type="date"
+                    value={form.end_date}
+                    onChange={(e) =>
+                      setForm((p) => ({ ...p, end_date: e.target.value }))
+                    }
+                    className="input-md"
+                  />
+                </div>
               </div>
 
               {/* Combobox Client */}
@@ -547,7 +633,7 @@ export function EngagementsPage() {
         </div>
       )}
 
-      {/* Modal ajout rapide client */}
+      {/* Modals d’ajout rapide (inchangés) */}
       {showAddClient && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in"
@@ -620,7 +706,6 @@ export function EngagementsPage() {
         </div>
       )}
 
-      {/* Modal ajout rapide responsable */}
       {showAddResponsible && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in"

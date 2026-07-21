@@ -1,5 +1,7 @@
-import { useState, useEffect, useMemo } from "react";
-import { Plus, Edit, Trash2, UserPlus } from "lucide-react";
+// src/pages/FindingsPage.tsx
+
+import { useState, useMemo } from "react";
+import { Plus, Edit, Trash2 } from "lucide-react";
 import { PageHeader } from "../components/ui/PageHeader";
 import { DataTable } from "../components/ui/DataTable";
 import { Badge } from "../components/ui/Badge";
@@ -24,7 +26,6 @@ export function FindingsPage() {
     orderAsc: false,
   });
 
-  // États pour le modal
   const [showModal, setShowModal] = useState(false);
   const [editingFinding, setEditingFinding] = useState<Finding | null>(null);
   const [form, setForm] = useState({
@@ -32,46 +33,10 @@ export function FindingsPage() {
     risk_level: "medium",
     status: "open",
     recommendation: "",
-    responsible_person: "",
+    responsible_person: "", // Champ texte
+    concerned_person: "", // Champ texte
     target_date: "",
   });
-
-  // États pour les profils (responsables)
-  const [profiles, setProfiles] = useState<{ id: string; full_name: string }[]>(
-    [],
-  );
-  const [showAddUser, setShowAddUser] = useState(false);
-  const [newUserForm, setNewUserForm] = useState({ full_name: "" });
-
-  // Charger les profils
-  useEffect(() => {
-    const fetchProfiles = async () => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, full_name")
-        .order("full_name");
-      if (!error) setProfiles(data || []);
-    };
-    fetchProfiles();
-  }, []);
-
-  // Ajout rapide d'un responsable
-  const handleAddUser = async () => {
-    if (!newUserForm.full_name.trim()) return alert("Veuillez saisir un nom");
-    const { data, error } = await supabase
-      .from("profiles")
-      .insert([{ full_name: newUserForm.full_name.trim() }])
-      .select()
-      .single();
-    if (error) {
-      alert("Erreur lors de l’ajout");
-      return;
-    }
-    setProfiles((prev) => [...prev, data]);
-    setForm((p) => ({ ...p, responsible_person: data.full_name }));
-    setShowAddUser(false);
-    setNewUserForm({ full_name: "" });
-  };
 
   const data = useMemo(() => rawData.map(mapFindingRow), [rawData]);
   const filtered =
@@ -85,7 +50,6 @@ export function FindingsPage() {
     low: data.filter((f) => f.risk_level === "low").length,
   };
 
-  // Sauvegarder (création ou mise à jour)
   const handleSave = async () => {
     try {
       if (!form.finding.trim()) {
@@ -99,6 +63,7 @@ export function FindingsPage() {
         status: form.status,
         recommendation: form.recommendation || null,
         responsible_person: form.responsible_person || null,
+        concerned_person: form.concerned_person || null,
         target_date: form.target_date || null,
         engagement_id: null,
         management_response: null,
@@ -140,7 +105,6 @@ export function FindingsPage() {
     }
   };
 
-  // Supprimer
   const handleDelete = async (id: string) => {
     if (!confirm("Supprimer ce constat ?")) return;
     try {
@@ -157,7 +121,6 @@ export function FindingsPage() {
     }
   };
 
-  // Ouvrir le formulaire d’édition
   const openEdit = (finding: Finding) => {
     setEditingFinding(finding);
     setForm({
@@ -166,12 +129,12 @@ export function FindingsPage() {
       status: finding.status,
       recommendation: finding.recommendation || "",
       responsible_person: finding.responsible_person || "",
+      concerned_person: (finding as any).concerned_person || "",
       target_date: finding.target_date || "",
     });
     setShowModal(true);
   };
 
-  // Ouvrir le formulaire de création
   const openCreate = () => {
     setEditingFinding(null);
     setForm({
@@ -180,12 +143,12 @@ export function FindingsPage() {
       status: "open",
       recommendation: "",
       responsible_person: "",
+      concerned_person: "",
       target_date: "",
     });
     setShowModal(true);
   };
 
-  // Colonnes avec actions Modifier / Supprimer
   const columns: ColumnDef<Finding>[] = [
     {
       key: "finding",
@@ -258,6 +221,14 @@ export function FindingsPage() {
       ),
     },
     { key: "responsible_person", label: "Responsable", sortable: true },
+    {
+      key: "concerned_person",
+      label: "Personne concernée",
+      sortable: true,
+      render: (value) => (
+        <span className="text-slate-300">{String(value ?? "-")}</span>
+      ),
+    },
     {
       key: "target_date",
       label: "Date cible",
@@ -449,44 +420,39 @@ export function FindingsPage() {
                 />
               </div>
 
-              {/* Responsable avec dropdown + ajout rapide */}
+              {/* Responsable : champ texte simple */}
               <div>
                 <label className="text-xs text-slate-400 mb-1 block">
                   Responsable
                 </label>
-                <div className="flex gap-2">
-                  <select
-                    value={
-                      profiles.find(
-                        (p) => p.full_name === form.responsible_person,
-                      )?.id || ""
-                    }
-                    onChange={(e) => {
-                      const selectedId = e.target.value;
-                      const profile = profiles.find((p) => p.id === selectedId);
-                      setForm((p) => ({
-                        ...p,
-                        responsible_person: profile ? profile.full_name : "",
-                      }));
-                    }}
-                    className="input-md flex-1"
-                  >
-                    <option value="">Non assigné</option>
-                    {profiles.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.full_name}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() => setShowAddUser(true)}
-                    className="btn-secondary btn-md px-2"
-                    title="Ajouter un responsable"
-                  >
-                    <UserPlus className="w-4 h-4" />
-                  </button>
-                </div>
+                <input
+                  type="text"
+                  value={form.responsible_person}
+                  onChange={(e) =>
+                    setForm((p) => ({
+                      ...p,
+                      responsible_person: e.target.value,
+                    }))
+                  }
+                  className="input-md"
+                  placeholder="Nom du responsable"
+                />
+              </div>
+
+              {/* Personne concernée : champ texte simple */}
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">
+                  Personne concernée
+                </label>
+                <input
+                  type="text"
+                  value={form.concerned_person}
+                  onChange={(e) =>
+                    setForm((p) => ({ ...p, concerned_person: e.target.value }))
+                  }
+                  className="input-md"
+                  placeholder="Nom de la personne concernée"
+                />
               </div>
 
               <div>
@@ -509,53 +475,6 @@ export function FindingsPage() {
                 </button>
                 <button
                   onClick={() => setShowModal(false)}
-                  className="btn-secondary btn-md"
-                >
-                  Annuler
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal ajout rapide responsable */}
-      {showAddUser && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in"
-          onClick={() => setShowAddUser(false)}
-        >
-          <div
-            className="card p-6 w-full max-w-sm animate-scale-in"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="text-lg font-semibold text-slate-50 mb-4">
-              Ajouter un responsable
-            </h2>
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs text-slate-400 mb-1 block">
-                  Nom complet
-                </label>
-                <input
-                  type="text"
-                  value={newUserForm.full_name}
-                  onChange={(e) =>
-                    setNewUserForm((p) => ({
-                      ...p,
-                      full_name: e.target.value,
-                    }))
-                  }
-                  className="input-md"
-                  placeholder="Ex: Jean Dupont"
-                />
-              </div>
-              <div className="flex gap-3 pt-2">
-                <button onClick={handleAddUser} className="btn-primary btn-md">
-                  Ajouter
-                </button>
-                <button
-                  onClick={() => setShowAddUser(false)}
                   className="btn-secondary btn-md"
                 >
                   Annuler

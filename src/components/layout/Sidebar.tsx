@@ -19,7 +19,8 @@ import {
   Hexagon,
   BookOpen,
   Receipt,
-  ClipboardList, // ✅ NOUVEAU pour l'icône Suivi CAC
+  ClipboardList,
+  FolderOpen, // ✅ ajout pour Ressources internes
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { NAV_ITEMS } from "../../lib/constants";
@@ -40,7 +41,8 @@ const iconMap: Record<string, React.FC<{ className?: string }>> = {
   Bell,
   BookOpen,
   Receipt,
-  ClipboardList, // ✅ NOUVEAU ajout dans le map
+  ClipboardList,
+  FolderOpen, // ✅ ajout dans le map
 };
 
 interface SidebarProps {

@@ -11,6 +11,7 @@ export type AssetStatus = 'active' | 'disposed' | 'maintenance';
 
 export type StockStatus = 'in_stock' | 'low_stock' | 'out_of_stock';
 
+export type DocumentCategory = 'ADMINISTRATIVE' | 'PERMANENT' | 'ANNUAL' | 'FISCAL' | 'SOCIAL' | 'AUDIT';
 export interface User {
   [key: string]: unknown;
   id: string;
@@ -255,4 +256,66 @@ export interface ManuelWidgetData {
   actions: string[];
   filters: string[];
   progress: number;
+}
+// src/types/index.ts
+
+export type EtablissementType = 
+  | 'siege' 
+  | 'agence' 
+  | 'succursale' 
+  | 'usine' 
+  | 'magasin' 
+  | 'bureau' 
+  | 'entrepot' 
+  | 'autre';
+
+export interface Etablissement {
+  id: string;
+  client_id: string;
+  code: string; // ex: ETS001
+  name: string;
+  type: EtablissementType;
+  address: string;
+  city: string;
+  region: string;
+  country: string;
+  phone: string;
+  email: string;
+  responsable: string;
+  date_ouverture: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  latitude?: number;
+  longitude?: number;
+  notes?: string;
+}
+
+export interface EtablissementFormData {
+  name: string;
+  type: EtablissementType;
+  address: string;
+  city: string;
+  region: string;
+  country: string;
+  phone: string;
+  email: string;
+  responsable: string;
+  date_ouverture: string;
+  is_active: boolean;
+}
+
+export interface WorkingPaper {
+  id: string;
+  name: string;
+  category: 'ADMINISTRATIVE' | 'PERMANENT' | 'ANNUAL' | 'FISCAL' | 'SOCIAL' | 'AUDIT';
+  reference: string;
+  status: string;
+  file_type: string;
+  file_size: number;
+  file_path: string;
+  version: number;
+  created_at: string;
+  updated_at?: string;
+  folder?: string; // optionnel si vous gardez l'ancien champ
 }

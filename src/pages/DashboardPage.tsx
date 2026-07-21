@@ -11,11 +11,10 @@ import {
 } from "../components/dashboard/DashboardCharts";
 import { useSupabaseQuery } from "../hooks/useSupabaseData";
 import {
-  buildEngagementProgressChart,
   buildReviewNotesStatusChart,
   buildRiskDistributionChart,
 } from "../lib/db-mappers";
-import { formatCurrency } from "../lib/utils";
+import { abbreviateNumber } from "../lib/utils";
 import type {
   Engagement,
   Finding,
@@ -24,7 +23,7 @@ import type {
   FixedAsset,
   LeaveRequest,
 } from "../types";
-import { abbreviateNumber } from "../lib/utils";
+
 // Types pour les tables supplémentaires
 interface StockItem {
   remaining_value: number;
@@ -62,7 +61,6 @@ const kpiIcons: Record<string, string> = {
 export function DashboardPage() {
   const navigate = useNavigate();
 
-  // ✅ Gestionnaire des actions rapides
   const handleQuickAction = (actionId: string) => {
     switch (actionId) {
       case "new-engagement":
@@ -94,7 +92,7 @@ export function DashboardPage() {
     }
   };
 
-  // ✅ Tables corrigées
+  // ----- Requêtes Supabase -----
   const {
     data: engagements,
     loading: engLoading,
@@ -173,13 +171,14 @@ export function DashboardPage() {
     orderBy: "created_at",
     orderAsc: false,
   });
+
   const { data: expenseReports } = useSupabaseQuery<any>({
     table: "expense_reports",
     orderBy: "created_at",
     orderAsc: false,
   });
 
-  // Debug logs after hooks
+  // Debug logs (conservés)
   console.log("Dashboard hooks:", {
     engagements: {
       loading: engLoading,
@@ -203,7 +202,7 @@ export function DashboardPage() {
     },
   });
 
-  // Direct supabase network test
+  // Test direct Supabase
   useEffect(() => {
     supabase
       .from("clients")
@@ -212,7 +211,7 @@ export function DashboardPage() {
       .catch((e) => console.error("direct supabase fetch error", e));
   }, []);
 
-  // ---- KPI ----
+  // ---- Calculs KPI ----
   const activeEngagements = engagements.filter((e) =>
     ["planning", "in_progress", "review"].includes(e.status),
   ).length;
@@ -239,6 +238,7 @@ export function DashboardPage() {
     (r) => r.status === "soumis" || r.status === "brouillon",
   ).length;
 
+  // ---- KPI Data ----
   const kpiData = useMemo(
     () => [
       {
@@ -280,7 +280,7 @@ export function DashboardPage() {
       {
         id: "inventory-value",
         label: "Valeur des stocks",
-        value: abbreviateNumber(inventoryValue), // au lieu de formatCurrency(inventoryValue)
+        value: abbreviateNumber(inventoryValue),
         change: 5.2,
         changeLabel: "vs mois dernier",
         trend: "up" as const,
@@ -289,7 +289,7 @@ export function DashboardPage() {
       {
         id: "asset-value",
         label: "Valeur des immobilisations",
-        value: formatCurrency(assetValue),
+        value: abbreviateNumber(assetValue),
         change: -2.1,
         changeLabel: "amortissement",
         trend: "down" as const,
@@ -304,16 +304,6 @@ export function DashboardPage() {
         trend: "up" as const,
         color: "primary" as const,
       },
-
-      {
-        id: "asset-value",
-        label: "Valeur des immobilisations",
-        value: abbreviateNumber(assetValue),
-        change: -2.1,
-        changeLabel: "amortissement",
-        trend: "down" as const,
-        color: "cyan" as const,
-      },
     ],
     [
       activeEngagements,
@@ -322,28 +312,37 @@ export function DashboardPage() {
       activeClients,
       inventoryValue,
       assetValue,
-      employeesOnLeave,
       openExpenseReports,
     ],
   );
 
   // ---- Graphiques ----
-  const engagementChart = useMemo(
-    () => buildEngagementProgressChart(engagements),
-    [engagements],
-  );
+  // 🔹 On construit manuellement le graphique des missions avec les noms des clients
+  const engagementChart = useMemo(() => {
+    if (!engagements || engagements.length === 0) return [];
+
+    // Créer un dictionnaire client_id → nom
+    const clientMap = new Map(clients.map((c) => [c.id, c.name]));
+
+    return engagements
+      .map((m) => ({
+        name: clientMap.get(m.client_id) || m.subject || "Sans nom",
+        value: m.progress || 0,
+      }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10);
+  }, [engagements, clients]);
 
   const reviewNotesChart = useMemo(
     () => buildReviewNotesStatusChart(reviewNotes),
     [reviewNotes],
   );
-
   const riskChart = useMemo(
     () => buildRiskDistributionChart(findings),
     [findings],
   );
 
-  // ---- Activités récentes (affichage manuel) ----
+  // ---- Activités récentes ----
   const recentActivities = useMemo(() => {
     if (!notifications || notifications.length === 0) return [];
     return notifications.slice(0, 5).map((n) => ({
@@ -388,7 +387,6 @@ export function DashboardPage() {
       {/* Bas de page */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <CategoryChart data={reviewNotesChart} />
-        {/* ✅ Passage de la fonction handleQuickAction */}
         <QuickActions onAction={handleQuickAction} className="lg:col-span-1" />
         <div className="card p-5">
           <div className="flex items-center justify-between mb-4">

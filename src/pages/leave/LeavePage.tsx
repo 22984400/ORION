@@ -1,3 +1,4 @@
+// src/pages/leave/LeavePage.tsx
 import { useState, useEffect, useRef } from "react";
 import {
   Plus,
@@ -9,6 +10,11 @@ import {
   Download,
   FileText,
   X,
+  Calculator,
+  Calendar,
+  Edit2,
+  Trash2,
+  AlertCircle,
 } from "lucide-react";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Badge } from "../../components/ui/Badge";
@@ -21,8 +27,30 @@ import type { LeaveRequest } from "../../types";
 
 const BUCKET_NAME = "leave_documents";
 
+// Compte les jours ouvrés (exclut les dimanches)
+function countWeekdaysExcludingSunday(start: Date, end: Date): number {
+  let count = 0;
+  const current = new Date(start);
+  while (current <= end) {
+    if (current.getDay() !== 0) count++;
+    current.setDate(current.getDate() + 1);
+  }
+  return count;
+}
+
+// Calcule le nombre de mois complets entre deux dates
+function monthsBetween(date1: Date, date2: Date): number {
+  const d1 = new Date(date1);
+  const d2 = new Date(date2);
+  let months = (d2.getFullYear() - d1.getFullYear()) * 12;
+  months += d2.getMonth() - d1.getMonth();
+  // Si le jour du mois est inférieur, on retire un mois
+  if (d2.getDate() < d1.getDate()) months--;
+  return Math.max(0, months);
+}
+
 export function LeavePage() {
-  const { user } = useAuth(); // ✅ Utilisation de useAuth
+  const { user } = useAuth();
 
   const [leaves, setLeaves] = useState<LeaveRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,9 +70,141 @@ export function LeavePage() {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Charger les demandes avec les noms des employés
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingFile, setEditingFile] = useState<File | null>(null);
+  const [updating, setUpdating] = useState(false);
+
+  // Solde de congés
+  const [balance, setBalance] = useState<{
+    total_earned: number;
+    taken: number;
+    remaining: number;
+    year: number;
+  } | null>(null);
+  const [loadingBalance, setLoadingBalance] = useState(false);
+  const [showAddDaysModal, setShowAddDaysModal] = useState(false);
+  const [extraDays, setExtraDays] = useState(0);
+  const [addingDays, setAddingDays] = useState(false);
+  const [hireDate, setHireDate] = useState<string | null>(null);
+
+  // Modal date d'embauche
+  const [showHireDateModal, setShowHireDateModal] = useState(false);
+  const [newHireDate, setNewHireDate] = useState("");
+
+  // Charger le solde de congés
+  const fetchBalance = async () => {
+    if (!user) return;
+    setLoadingBalance(true);
+    try {
+      const year = new Date().getFullYear();
+
+      // 1. Récupérer la date d'embauche
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("hire_date")
+        .eq("id", user.id)
+        .single();
+
+      if (profileError) throw profileError;
+      if (!profile?.hire_date) {
+        setBalance(null);
+        setHireDate(null);
+        setLoadingBalance(false);
+        return;
+      }
+
+      setHireDate(profile.hire_date);
+
+      // 2. Calculer le total acquis (2 jours par mois complet)
+      const hire = new Date(profile.hire_date);
+      const now = new Date();
+      const monthsWorked = monthsBetween(hire, now);
+      const totalEarned = monthsWorked * 2;
+
+      // 3. Récupérer les jours déjà pris (demandes approuvées dans l'année)
+      const { data: takenLeaves, error: takenError } = await supabase
+        .from("leave_requests")
+        .select("duration")
+        .eq("employee_id", user.id)
+        .eq("status", "approved")
+        .gte("start_date", `${year}-01-01`)
+        .lte("end_date", `${year}-12-31`);
+
+      if (takenError) throw takenError;
+      const taken = takenLeaves?.reduce((sum, l) => sum + l.duration, 0) || 0;
+
+      // 4. Récupérer les jours supplémentaires
+      const { data: balData, error: balError } = await supabase
+        .from("leave_balances")
+        .select("extra_days")
+        .eq("employee_id", user.id)
+        .eq("year", year)
+        .maybeSingle();
+
+      if (balError) throw balError;
+      const extraDaysFromDb = balData?.extra_days || 0;
+
+      const totalWithExtra = totalEarned + extraDaysFromDb;
+      const remaining = totalWithExtra - taken;
+
+      // 5. Mettre à jour leave_balances
+      const newBalance = {
+        employee_id: user.id,
+        year: year,
+        total_days_earned: totalWithExtra,
+        days_taken: taken,
+        days_remaining: remaining,
+        extra_days: extraDaysFromDb,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error: upsertError } = await supabase
+        .from("leave_balances")
+        .upsert(newBalance, { onConflict: "employee_id, year" });
+
+      if (upsertError) throw upsertError;
+
+      setBalance({
+        total_earned: totalWithExtra,
+        taken: taken,
+        remaining: remaining,
+        year: year,
+      });
+    } catch (err) {
+      console.error("Erreur chargement solde:", err);
+    } finally {
+      setLoadingBalance(false);
+    }
+  };
+
+  // Mettre à jour la date d'embauche
+  const updateHireDate = async () => {
+    if (!user) return;
+    if (!newHireDate) {
+      alert("Veuillez sélectionner une date.");
+      return;
+    }
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ hire_date: newHireDate })
+        .eq("id", user.id);
+      if (error) throw error;
+      await fetchBalance();
+      setShowHireDateModal(false);
+      setNewHireDate("");
+      void addNotification({
+        title: "Date d'embauche mise à jour",
+        message: "Votre date d'embauche a été enregistrée.",
+        type: "profile",
+      });
+    } catch (err: any) {
+      alert("Erreur : " + err.message);
+    }
+  };
+
+  // Charger les demandes
   const fetchLeaves = async () => {
-    // ⚠️ Attendre que l'utilisateur soit authentifié
     if (!user) {
       setLoading(false);
       return;
@@ -103,11 +263,12 @@ export function LeavePage() {
     }
   }, [user]);
 
-  // Charger les données au montage et quand l'utilisateur change
   useEffect(() => {
     fetchLeaves();
-  }, [user]); // ✅ Dépendance à "user"
+    fetchBalance();
+  }, [user]);
 
+  // Filtrage
   const filtered = leaves.filter(
     (l) => statusFilter === "all" || l.status === statusFilter,
   );
@@ -119,7 +280,7 @@ export function LeavePage() {
     rejected: leaves.filter((l) => l.status === "rejected").length,
   };
 
-  // ----- SOUMISSION AVEC UPLOAD -----
+  // ----- SOUMISSION -----
   const handleSubmit = async () => {
     if (!form.employee_id) {
       alert("Vous devez être connecté pour demander un congé");
@@ -140,9 +301,12 @@ export function LeavePage() {
 
     const start = new Date(form.start_date);
     const end = new Date(form.end_date);
-    const diffTime = Math.abs(end.getTime() - start.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-    const duration = diffDays;
+    const duration = countWeekdaysExcludingSunday(start, end);
+
+    if (balance && duration > balance.remaining) {
+      alert(`Solde insuffisant. Vous disposez de ${balance.remaining} jours.`);
+      return;
+    }
 
     setSubmitting(true);
     setUploading(!!file);
@@ -150,7 +314,6 @@ export function LeavePage() {
     try {
       let supportingDocumentUrl: string | null = null;
 
-      // 1. Upload du fichier si présent
       if (file) {
         const fileExt = file.name.split(".").pop();
         const fileName = `${Date.now()}_${file.name}`;
@@ -169,7 +332,6 @@ export function LeavePage() {
         supportingDocumentUrl = urlData.publicUrl;
       }
 
-      // 2. Insérer la demande
       const payload = {
         employee_id: form.employee_id,
         leave_type: form.leave_type,
@@ -185,8 +347,8 @@ export function LeavePage() {
 
       if (error) throw error;
 
-      // 3. Rafraîchir et fermer
       await fetchLeaves();
+      await fetchBalance();
       setShowRequest(false);
       setForm((prev) => ({
         ...prev,
@@ -222,6 +384,7 @@ export function LeavePage() {
         .update({ status: "approved" })
         .eq("id", id);
       if (error) throw error;
+      await fetchBalance();
       await fetchLeaves();
       void addNotification({
         title: "Demande de congé approuvée",
@@ -252,15 +415,235 @@ export function LeavePage() {
     }
   };
 
-  // ----- RENDU -----
+  // ----- MODIFICATION -----
+  const handleEdit = (leave: LeaveRequest) => {
+    setEditingId(leave.id);
+    setForm({
+      employee_id: leave.employee_id,
+      leave_type: leave.leave_type,
+      reason: leave.reason,
+      start_date: leave.start_date,
+      end_date: leave.end_date,
+      duration: leave.duration,
+    });
+    setEditingFile(null);
+    setShowRequest(true);
+  };
+
+  // ----- MISE À JOUR -----
+  const handleUpdate = async () => {
+    if (!editingId) return;
+    if (!form.employee_id) {
+      alert("Vous devez être connecté pour modifier une demande");
+      return;
+    }
+    if (!form.reason.trim()) {
+      alert("Veuillez saisir un motif");
+      return;
+    }
+    if (!form.start_date || !form.end_date) {
+      alert("Veuillez sélectionner les dates de début et de fin");
+      return;
+    }
+    if (new Date(form.start_date) > new Date(form.end_date)) {
+      alert("La date de début doit être antérieure ou égale à la date de fin");
+      return;
+    }
+
+    const start = new Date(form.start_date);
+    const end = new Date(form.end_date);
+    const duration = countWeekdaysExcludingSunday(start, end);
+
+    setSubmitting(true);
+    setUpdating(true);
+    setUploading(!!editingFile);
+
+    try {
+      let supportingDocumentUrl: string | null = null;
+
+      if (editingFile) {
+        const fileExt = editingFile.name.split(".").pop();
+        const fileName = `${Date.now()}_${editingFile.name}`;
+        const filePath = `leave_documents/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from(BUCKET_NAME)
+          .upload(filePath, editingFile);
+
+        if (uploadError) throw uploadError;
+
+        const { data: urlData } = supabase.storage
+          .from(BUCKET_NAME)
+          .getPublicUrl(filePath);
+
+        supportingDocumentUrl = urlData.publicUrl;
+      }
+
+      const payload = {
+        leave_type: form.leave_type,
+        reason: form.reason.trim(),
+        start_date: form.start_date,
+        end_date: form.end_date,
+        duration: duration,
+        ...(supportingDocumentUrl && {
+          supporting_document: supportingDocumentUrl,
+        }),
+      };
+
+      const { error } = await supabase
+        .from("leave_requests")
+        .update(payload)
+        .eq("id", editingId);
+
+      if (error) throw error;
+
+      await fetchLeaves();
+      await fetchBalance();
+      setShowRequest(false);
+      setEditingId(null);
+      setEditingFile(null);
+      setForm((prev) => ({
+        ...prev,
+        leave_type: "annual",
+        reason: "",
+        start_date: "",
+        end_date: "",
+        duration: 1,
+      }));
+      void addNotification({
+        title: "Demande de congé mise à jour",
+        message: "Votre demande de congé a été modifiée avec succès.",
+        type: "leave",
+      });
+    } catch (err: any) {
+      alert("Erreur lors de la mise à jour : " + err.message);
+    } finally {
+      setSubmitting(false);
+      setUpdating(false);
+      setUploading(false);
+    }
+  };
+
+  // ----- SUPPRESSION -----
+  const handleDelete = async (id: string, status: string) => {
+    if (status !== "submitted") {
+      alert("Seules les demandes en attente peuvent être supprimées.");
+      return;
+    }
+    if (!confirm("Supprimer définitivement cette demande de congé ?")) return;
+
+    try {
+      const { error } = await supabase
+        .from("leave_requests")
+        .delete()
+        .eq("id", id);
+
+      if (error) throw error;
+
+      await fetchLeaves();
+      void addNotification({
+        title: "Demande de congé supprimée",
+        message: "Une demande de congé a été supprimée.",
+        type: "leave",
+      });
+    } catch (err: any) {
+      alert("Erreur lors de la suppression : " + err.message);
+    }
+  };
+
+  // ----- AJOUT DE JOURS SUPPLÉMENTAIRES -----
+  const handleAddExtraDays = async () => {
+    if (!user) return;
+    if (extraDays <= 0) {
+      alert("Veuillez saisir un nombre positif.");
+      return;
+    }
+    setAddingDays(true);
+    try {
+      const year = new Date().getFullYear();
+      const { data: balData, error: balError } = await supabase
+        .from("leave_balances")
+        .select("extra_days")
+        .eq("employee_id", user.id)
+        .eq("year", year)
+        .maybeSingle();
+
+      if (balError) throw balError;
+
+      const currentExtra = balData?.extra_days || 0;
+      const newExtra = currentExtra + extraDays;
+
+      const { error: upsertError } = await supabase
+        .from("leave_balances")
+        .upsert(
+          {
+            employee_id: user.id,
+            year: year,
+            extra_days: newExtra,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "employee_id, year" },
+        );
+
+      if (upsertError) throw upsertError;
+
+      await fetchBalance();
+      setShowAddDaysModal(false);
+      setExtraDays(0);
+      void addNotification({
+        title: "Jours de congé ajoutés",
+        message: `${extraDays} jours ont été ajoutés à votre solde.`,
+        type: "leave",
+      });
+    } catch (err: any) {
+      alert("Erreur lors de l'ajout : " + err.message);
+    } finally {
+      setAddingDays(false);
+    }
+  };
+
+  // ----- RENDU DU SOLDE -----
+  const renderBalance = () => {
+    if (loadingBalance) return "...";
+    if (!hireDate) {
+      return (
+        <div className="flex items-center gap-2 text-amber-400 text-sm">
+          <AlertCircle className="w-4 h-4" />
+          <span>Date d'embauche non renseignée</span>
+          <button
+            onClick={() => setShowHireDateModal(true)}
+            className="text-primary-400 hover:underline text-xs ml-2"
+          >
+            Ajouter ma date d'embauche
+          </button>
+        </div>
+      );
+    }
+    return balance?.remaining ?? 0;
+  };
+
+  // ----- RENDU PRINCIPAL -----
   return (
     <div className="page-container">
       <PageHeader
         title="Congés"
-        description="Gérez les demandes de congé et les approbations"
+        description="Gérez vos demandes de congé et suivez votre solde"
         actions={
           <button
-            onClick={() => setShowRequest(true)}
+            onClick={() => {
+              setEditingId(null);
+              setForm({
+                employee_id: user?.id || "",
+                leave_type: "annual",
+                reason: "",
+                start_date: "",
+                end_date: "",
+                duration: 1,
+              });
+              setFile(null);
+              setEditingFile(null);
+              setShowRequest(true);
+            }}
             className="btn-primary btn-md"
           >
             <Plus className="w-4 h-4" />
@@ -274,6 +657,57 @@ export function LeavePage() {
           Erreur de chargement : {error}
         </div>
       )}
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="card p-4 bg-gradient-to-br from-primary-900/20 to-primary-700/10 border-primary-500/30">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-primary-500/20 text-primary-300">
+              <Calculator size={20} />
+            </div>
+            <div>
+              <p className="text-xs text-slate-400">Solde de congés (CNP)</p>
+              <p className="text-2xl font-bold text-primary-300">
+                {renderBalance()}
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="card p-4 bg-gradient-to-br from-emerald-900/20 to-emerald-700/10 border-emerald-500/30">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-emerald-500/20 text-emerald-300">
+              <Calendar size={20} />
+            </div>
+            <div>
+              <p className="text-xs text-slate-400">Acquis cette année</p>
+              <p className="text-2xl font-bold text-emerald-300">
+                {loadingBalance ? "..." : (balance?.total_earned ?? 0)}
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="card p-4 bg-gradient-to-br from-amber-900/20 to-amber-700/10 border-amber-500/30">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-amber-500/20 text-amber-300">
+              <UserCheck size={20} />
+            </div>
+            <div>
+              <p className="text-xs text-slate-400">Déjà pris</p>
+              <p className="text-2xl font-bold text-amber-300">
+                {loadingBalance ? "..." : (balance?.taken ?? 0)}
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="card p-4 bg-gradient-to-br from-blue-900/20 to-blue-700/10 border-blue-500/30 flex items-center justify-center">
+          <button
+            onClick={() => setShowAddDaysModal(true)}
+            className="text-sm text-blue-300 hover:text-blue-200 flex items-center gap-2 transition-colors"
+          >
+            <Plus size={16} />
+            Ajouter des jours
+          </button>
+        </div>
+      </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         {[
@@ -379,84 +813,117 @@ export function LeavePage() {
                   </td>
                 </tr>
               ) : (
-                filtered.map((leave) => (
-                  <tr
-                    key={leave.id}
-                    className="hover:bg-slate-700/30 transition-colors"
-                  >
-                    <td className="px-4 py-3 font-medium text-slate-100">
-                      {leave.employee_name}
-                    </td>
-                    <td className="px-4 py-3 text-slate-300">
-                      {LEAVE_TYPE_LABELS[leave.leave_type] ?? leave.leave_type}
-                    </td>
-                    <td className="px-4 py-3 tabular-nums text-slate-300">
-                      {leave.duration} jours
-                    </td>
-                    <td className="px-4 py-3 text-slate-300">
-                      {formatDate(leave.start_date)}
-                    </td>
-                    <td className="px-4 py-3 text-slate-300">
-                      {formatDate(leave.end_date)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge
-                        variant={
-                          leave.status === "approved"
-                            ? "success"
-                            : leave.status === "submitted"
-                              ? "warning"
-                              : leave.status === "rejected"
-                                ? "error"
-                                : "neutral"
-                        }
-                      >
-                        {leave.status === "approved"
-                          ? "Approuvé"
-                          : leave.status === "submitted"
-                            ? "En attente"
-                            : leave.status === "rejected"
-                              ? "Rejeté"
-                              : "Autre"}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-3">
-                      {leave.supporting_document ? (
-                        <a
-                          href={leave.supporting_document}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1 text-primary-400 hover:text-primary-300 transition-colors"
+                filtered.map((leave) => {
+                  const isOwner = user && leave.employee_id === user.id;
+                  const isPending = leave.status === "submitted";
+                  const canModify = isOwner && isPending;
+                  const canApproveReject = !isOwner;
+
+                  return (
+                    <tr
+                      key={leave.id}
+                      className="hover:bg-slate-700/30 transition-colors"
+                    >
+                      <td className="px-4 py-3 font-medium text-slate-100">
+                        {leave.employee_name}
+                      </td>
+                      <td className="px-4 py-3 text-slate-300">
+                        {LEAVE_TYPE_LABELS[leave.leave_type] ??
+                          leave.leave_type}
+                      </td>
+                      <td className="px-4 py-3 tabular-nums text-slate-300">
+                        {leave.duration} jours
+                      </td>
+                      <td className="px-4 py-3 text-slate-300">
+                        {formatDate(leave.start_date)}
+                      </td>
+                      <td className="px-4 py-3 text-slate-300">
+                        {formatDate(leave.end_date)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge
+                          variant={
+                            leave.status === "approved"
+                              ? "success"
+                              : leave.status === "submitted"
+                                ? "warning"
+                                : leave.status === "rejected"
+                                  ? "error"
+                                  : "neutral"
+                          }
                         >
-                          <FileText className="w-4 h-4" />
-                          <span className="text-xs">Télécharger</span>
-                        </a>
-                      ) : (
-                        <span className="text-slate-500 text-xs">-</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {leave.status === "submitted" && (
-                        <div className="flex gap-1">
-                          <button
-                            onClick={() => handleApprove(leave.id)}
-                            className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-success-400"
-                            aria-label="Approuver"
+                          {leave.status === "approved"
+                            ? "Approuvé"
+                            : leave.status === "submitted"
+                              ? "En attente"
+                              : leave.status === "rejected"
+                                ? "Rejeté"
+                                : "Autre"}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3">
+                        {leave.supporting_document ? (
+                          <a
+                            href={leave.supporting_document}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 text-primary-400 hover:text-primary-300 transition-colors"
                           >
-                            <Check className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleReject(leave.id)}
-                            className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-error-400"
-                            aria-label="Rejeter"
-                          >
-                            <XIcon className="w-4 h-4" />
-                          </button>
+                            <FileText className="w-4 h-4" />
+                            <span className="text-xs">Télécharger</span>
+                          </a>
+                        ) : (
+                          <span className="text-slate-500 text-xs">-</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1">
+                          {isPending && canModify && (
+                            <>
+                              <button
+                                onClick={() => handleEdit(leave)}
+                                className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-primary-400"
+                                aria-label="Modifier"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() =>
+                                  handleDelete(leave.id, leave.status)
+                                }
+                                className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-error-400"
+                                aria-label="Supprimer"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </>
+                          )}
+                          {isPending && !isOwner && (
+                            <>
+                              <button
+                                onClick={() => handleApprove(leave.id)}
+                                className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-success-400"
+                                aria-label="Approuver"
+                              >
+                                <Check className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleReject(leave.id)}
+                                className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-error-400"
+                                aria-label="Rejeter"
+                              >
+                                <XIcon className="w-4 h-4" />
+                              </button>
+                            </>
+                          )}
+                          {!isPending && (
+                            <span className="text-xs text-slate-500">-</span>
+                          )}
                         </div>
-                      )}
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -474,7 +941,7 @@ export function LeavePage() {
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="text-lg font-semibold text-slate-50 mb-4">
-              Demander un congé
+              {editingId ? "Modifier la demande" : "Demander un congé"}
             </h2>
             <div className="space-y-3">
               <div>
@@ -540,12 +1007,8 @@ export function LeavePage() {
                         const start = new Date(e.target.value);
                         const end = new Date(form.end_date);
                         if (start <= end) {
-                          const diff =
-                            Math.ceil(
-                              (end.getTime() - start.getTime()) /
-                                (1000 * 60 * 60 * 24),
-                            ) + 1;
-                          setForm((p) => ({ ...p, duration: diff }));
+                          const dur = countWeekdaysExcludingSunday(start, end);
+                          setForm((p) => ({ ...p, duration: dur }));
                         }
                       }
                     }}
@@ -565,12 +1028,8 @@ export function LeavePage() {
                         const start = new Date(form.start_date);
                         const end = new Date(e.target.value);
                         if (start <= end) {
-                          const diff =
-                            Math.ceil(
-                              (end.getTime() - start.getTime()) /
-                                (1000 * 60 * 60 * 24),
-                            ) + 1;
-                          setForm((p) => ({ ...p, duration: diff }));
+                          const dur = countWeekdaysExcludingSunday(start, end);
+                          setForm((p) => ({ ...p, duration: dur }));
                         }
                       }
                     }}
@@ -580,7 +1039,7 @@ export function LeavePage() {
               </div>
               <div>
                 <label className="text-xs text-slate-400 mb-1 block">
-                  Durée (jours)
+                  Durée (jours ouvrés, sans dimanches)
                 </label>
                 <input
                   type="number"
@@ -597,12 +1056,16 @@ export function LeavePage() {
                 />
                 <p className="text-xs text-slate-400 mt-1">
                   {form.start_date && form.end_date
-                    ? `Calculé automatiquement : ${form.duration} jour(s)`
+                    ? `Calculé automatiquement : ${form.duration} jour(s) (dimanches exclus)`
                     : "Renseignez les dates pour le calcul automatique"}
                 </p>
+                {balance && (
+                  <p className="text-xs text-amber-400 mt-1">
+                    Solde disponible : {balance.remaining} jours
+                  </p>
+                )}
               </div>
 
-              {/* Champ de téléversement de fichier */}
               <div>
                 <label className="text-xs text-slate-400 mb-1 block">
                   Justificatif (optionnel)
@@ -612,22 +1075,37 @@ export function LeavePage() {
                   type="file"
                   onChange={(e) => {
                     if (e.target.files && e.target.files[0]) {
-                      setFile(e.target.files[0]);
+                      if (editingId) {
+                        setEditingFile(e.target.files[0]);
+                      } else {
+                        setFile(e.target.files[0]);
+                      }
                     }
                   }}
                   className="input-md w-full"
                   accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
                 />
-                {file && (
+                {file && !editingId && (
                   <p className="text-xs text-slate-400 mt-1">
                     📄 {file.name} ({Math.round(file.size / 1024)} Ko)
+                  </p>
+                )}
+                {editingFile && editingId && (
+                  <p className="text-xs text-slate-400 mt-1">
+                    📄 Nouveau fichier : {editingFile.name} (
+                    {Math.round(editingFile.size / 1024)} Ko)
+                  </p>
+                )}
+                {editingId && !editingFile && (
+                  <p className="text-xs text-slate-400 mt-1">
+                    Laisser vide pour conserver le fichier actuel.
                   </p>
                 )}
               </div>
 
               <div className="flex gap-3 pt-2">
                 <button
-                  onClick={handleSubmit}
+                  onClick={editingId ? handleUpdate : handleSubmit}
                   className="btn-primary btn-md flex-1"
                   disabled={submitting || uploading}
                 >
@@ -635,16 +1113,121 @@ export function LeavePage() {
                     ? "Téléversement..."
                     : submitting
                       ? "Soumission..."
-                      : "Soumettre"}
+                      : editingId
+                        ? "Mettre à jour"
+                        : "Soumettre"}
                 </button>
                 <button
-                  onClick={() => setShowRequest(false)}
+                  onClick={() => {
+                    setShowRequest(false);
+                    setEditingId(null);
+                    setEditingFile(null);
+                  }}
                   className="btn-secondary btn-md"
                   disabled={submitting || uploading}
                 >
                   Annuler
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL AJOUT DE JOURS SUPPLÉMENTAIRES */}
+      {showAddDaysModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+          onClick={() => !addingDays && setShowAddDaysModal(false)}
+        >
+          <div
+            className="card p-6 w-full max-w-sm animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-semibold text-slate-50 mb-4">
+              Ajouter des jours de congé
+            </h2>
+            <p className="text-sm text-slate-300 mb-4">
+              Cette action ajoutera des jours à votre solde de congés (CNP).
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">
+                  Nombre de jours à ajouter
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  value={extraDays}
+                  onChange={(e) =>
+                    setExtraDays(parseFloat(e.target.value) || 0)
+                  }
+                  className="input-md w-full"
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={handleAddExtraDays}
+                  disabled={addingDays}
+                  className="btn-primary btn-md flex-1"
+                >
+                  {addingDays ? "Ajout..." : "Ajouter"}
+                </button>
+                <button
+                  onClick={() => setShowAddDaysModal(false)}
+                  className="btn-secondary btn-md"
+                  disabled={addingDays}
+                >
+                  Annuler
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DATE D'EMBAUCHE */}
+      {showHireDateModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+          onClick={() => setShowHireDateModal(false)}
+        >
+          <div
+            className="card p-6 w-full max-w-sm animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-semibold text-slate-50 mb-4">
+              Date d'embauche
+            </h2>
+            <p className="text-sm text-slate-300 mb-4">
+              Indiquez votre date d'entrée dans l'entreprise pour que le solde
+              de congés soit calculé automatiquement.
+            </p>
+            <div>
+              <label className="text-xs text-slate-400 mb-1 block">
+                Date de début de contrat
+              </label>
+              <input
+                type="date"
+                value={newHireDate}
+                onChange={(e) => setNewHireDate(e.target.value)}
+                className="input-md w-full"
+              />
+            </div>
+            <div className="flex gap-3 pt-4">
+              <button
+                onClick={updateHireDate}
+                className="btn-primary btn-md flex-1"
+              >
+                Enregistrer
+              </button>
+              <button
+                onClick={() => setShowHireDateModal(false)}
+                className="btn-secondary btn-md"
+              >
+                Annuler
+              </button>
             </div>
           </div>
         </div>

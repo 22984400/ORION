@@ -5,7 +5,7 @@ import styled from "styled-components";
 import { supabase } from "../../lib/supabase";
 import { format, differenceInYears } from "date-fns";
 import { fr } from "date-fns/locale";
-import { useAuth } from "../../contexts/AuthContext"; // Ajout de useAuth
+import { useAuth } from "../../contexts/AuthContext";
 
 // ==================== STYLES ====================
 const Container = styled.div`
@@ -265,7 +265,7 @@ interface Score {
 }
 
 const CollaborateurFiche: React.FC = () => {
-  const { user } = useAuth(); // Récupération de l'utilisateur
+  const { user } = useAuth();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const isNew = id === "new" || !id;
@@ -299,7 +299,6 @@ const CollaborateurFiche: React.FC = () => {
   const cniInputRef = useRef<HTMLInputElement>(null);
 
   const loadData = async () => {
-    // ⚠️ Attendre que l'utilisateur soit authentifié
     if (!user) {
       setLoading(false);
       return;
@@ -316,7 +315,6 @@ const CollaborateurFiche: React.FC = () => {
       if (error) throw error;
       setCollaborateur(collab);
 
-      // Calculer l'âge
       if (collab.date_naissance) {
         const age = differenceInYears(
           new Date(),
@@ -325,7 +323,6 @@ const CollaborateurFiche: React.FC = () => {
         setAge(age);
       }
 
-      // Charger les formations
       const { data: f, error: fErr } = await supabase
         .from("formations")
         .select("*")
@@ -333,7 +330,6 @@ const CollaborateurFiche: React.FC = () => {
         .order("date_obtention", { ascending: false });
       if (!fErr) setFormations(f || []);
 
-      // Charger les disciplines
       const { data: d, error: dErr } = await supabase
         .from("disciplines")
         .select("*")
@@ -341,7 +337,6 @@ const CollaborateurFiche: React.FC = () => {
         .order("date", { ascending: false });
       if (!dErr) setDisciplines(d || []);
 
-      // Charger les scores (le plus récent)
       const { data: s, error: sErr } = await supabase
         .from("scores")
         .select("*")
@@ -359,9 +354,8 @@ const CollaborateurFiche: React.FC = () => {
 
   useEffect(() => {
     loadData();
-  }, [id, user]); // ✅ Ajout de "user" comme dépendance
+  }, [id, user]);
 
-  // Calculer l'âge quand la date de naissance change
   useEffect(() => {
     if (collaborateur.date_naissance) {
       const age = differenceInYears(
@@ -409,11 +403,17 @@ const CollaborateurFiche: React.FC = () => {
       alert("Veuillez renseigner au moins le nom et le prénom.");
       return;
     }
+    // Vérifier que la date d'embauche est renseignée
+    if (!collaborateur.date_embauche) {
+      alert("Veuillez renseigner la date d'embauche.");
+      return;
+    }
 
     try {
       setSaving(true);
       const dataToSave = { ...collaborateur };
 
+      let savedId = id;
       if (isNew) {
         const { data, error } = await supabase
           .from("collaborateurs")
@@ -421,6 +421,7 @@ const CollaborateurFiche: React.FC = () => {
           .select()
           .single();
         if (error) throw error;
+        savedId = data.id;
         navigate(`/collaborateurs/${data.id}`);
       } else {
         const { error } = await supabase
@@ -429,6 +430,15 @@ const CollaborateurFiche: React.FC = () => {
           .eq("id", id);
         if (error) throw error;
       }
+
+      // Mettre à jour la table profiles avec la date d'embauche pour l'utilisateur courant
+      if (user && dataToSave.date_embauche) {
+        await supabase
+          .from("profiles")
+          .update({ hire_date: dataToSave.date_embauche })
+          .eq("id", user.id);
+      }
+
       alert("Collaborateur sauvegardé !");
       loadData();
     } catch (err) {
@@ -656,11 +666,12 @@ const CollaborateurFiche: React.FC = () => {
               />
             </Field>
             <Field>
-              <label>Date d'embauche</label>
+              <label>Date d'embauche *</label>
               <input
                 type="date"
                 value={collaborateur.date_embauche || ""}
                 onChange={(e) => handleChange("date_embauche", e.target.value)}
+                required
               />
             </Field>
             <Field>

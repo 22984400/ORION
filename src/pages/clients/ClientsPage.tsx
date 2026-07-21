@@ -1,4 +1,5 @@
 // src/pages/clients/ClientsPage.tsx
+
 import { useEffect, useState } from "react";
 import { Plus, Search, Edit2, Trash2, X, Check } from "lucide-react";
 import { supabase } from "../../lib/supabase";
@@ -7,13 +8,37 @@ import { useCountry } from "../../contexts/CountryContext";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { addNotification } from "../../lib/notifications";
+import { EtablissementsSection } from "./components/EtablissementsSection";
 
-// Type Client complet
+// ==================== CONSTANTS ====================
+const COUNTRIES = [
+  { code: "CMR", label: "Cameroun", flag: "🇨🇲" },
+  { code: "BDI", label: "Burundi", flag: "🇧🇮" },
+  { code: "COG", label: "République du Congo", flag: "🇨🇬" },
+  { code: "GAB", label: "Gabon", flag: "🇬🇦" },
+  { code: "RWA", label: "Rwanda", flag: "🇷🇼" },
+  { code: "TZA", label: "Tanzanie", flag: "🇹🇿" },
+  { code: "UGA", label: "Ouganda", flag: "🇺🇬" },
+  { code: "COD", label: "République Démocratique du Congo", flag: "🇨🇩" },
+  { code: "CAN", label: "Canada", flag: "🇨🇦" },
+  { code: "FRA", label: "France", flag: "🇫🇷" },
+  { code: "USA", label: "USA", flag: "🇺🇸" },
+  { code: "ARE", label: "Dubai (UAE)", flag: "🇦🇪" },
+];
+
+const NATURE_OPTIONS = [
+  "Commissariat aux comptes",
+  "Conseil",
+  "Expertise comptables",
+  "CGA",
+];
+
 type Client = {
   id: string;
   client_code: string;
   name: string;
   country: string;
+  nature?: string;
   address_bp: string;
   nui: string;
   rccm: string;
@@ -47,6 +72,50 @@ type Client = {
   versement_1_pourcent_cdd?: boolean;
   soumis_cotisations_tns?: boolean;
   status?: string;
+  // colonnes de référence (IDs)
+  forme_juridique_id?: number | null;
+  statut_fiscal_id?: number | null;
+  regime_fiscal_id?: number | null;
+  nature_id?: number | null;
+};
+
+// Types pour les données de référence
+type RefForme = { id: number; label: string };
+type RefStatutFiscal = { id: number; label: string };
+type RefRegimeFiscal = { id: number; label: string };
+type RefNature = { id: number; label: string };
+type RefTaxe = {
+  id: number;
+  code: string;
+  libelle: string;
+  obligation: string;
+  deadline: string;
+  assujettis_condition: string;
+  legal_ref: string;
+  periodicite: string;
+};
+type RefCategory = { id: number; label: string };
+type RefDocument = {
+  id: number;
+  category_id: number;
+  label: string;
+  ref_categories_documents?: RefCategory;
+};
+type ClientDocument = {
+  id: number;
+  client_id: string;
+  document_id: number;
+  status: "a_fournir" | "fourni" | "non_applicable";
+  date_fourni?: string;
+  commentaire?: string;
+};
+type ClientTaxe = {
+  id: number;
+  client_id: string;
+  taxe_id: number;
+  assujetti: boolean;
+  date_derniere_declaration?: string;
+  commentaire?: string;
 };
 
 type ModalState = { open: boolean; client: Partial<Client> | null };
@@ -58,72 +127,161 @@ export default function ClientsPage() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // Filtres
+  const [filterCountry, setFilterCountry] = useState<string>("all");
+  const [filterNature, setFilterNature] = useState<string>("all");
+
+  // État du modal
   const [modal, setModal] = useState<ModalState>({ open: false, client: null });
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<
-    "general" | "juridiques" | "fiscales" | "sociales"
+    "general" | "juridiques" | "fiscales" | "sociales" | "etablissements"
   >("general");
 
-  const load = async () => {
-    // ⚠️ Attendre que l'utilisateur soit authentifié
-    if (!user) {
-      setLoading(false);
-      return;
-    }
+  // États pour les données de référence et les liaisons client
+  const [refs, setRefs] = useState<{
+    formes: RefForme[];
+    statuts: RefStatutFiscal[];
+    regimes: RefRegimeFiscal[];
+    natures: RefNature[];
+    taxes: RefTaxe[];
+    categories: RefCategory[];
+    documents: RefDocument[];
+  }>({
+    formes: [],
+    statuts: [],
+    regimes: [],
+    natures: [],
+    taxes: [],
+    categories: [],
+    documents: [],
+  });
 
+  const [clientDocuments, setClientDocuments] = useState<ClientDocument[]>([]);
+  const [clientTaxes, setClientTaxes] = useState<ClientTaxe[]>([]);
+
+  // ===== Chargement des références =====
+  const loadReferences = async () => {
+    try {
+      const [
+        formesRes,
+        statutsRes,
+        regimesRes,
+        naturesRes,
+        taxesRes,
+        categoriesRes,
+        documentsRes,
+      ] = await Promise.all([
+        supabase.from("ref_formes_juridiques").select("*").order("label"),
+        supabase.from("ref_statuts_fiscaux").select("*").order("label"),
+        supabase.from("ref_regimes_fiscaux").select("*").order("label"),
+        supabase.from("ref_natures").select("*").order("label"),
+        supabase.from("ref_taxes").select("*").order("libelle"),
+        supabase.from("ref_categories_documents").select("*").order("label"),
+        supabase
+          .from("ref_documents")
+          .select("*, ref_categories_documents!inner(label)")
+          .order("category_id, label"),
+      ]);
+
+      setRefs({
+        formes: formesRes.data || [],
+        statuts: statutsRes.data || [],
+        regimes: regimesRes.data || [],
+        natures: naturesRes.data || [],
+        taxes: taxesRes.data || [],
+        categories: categoriesRes.data || [],
+        documents: documentsRes.data || [],
+      });
+    } catch (err) {
+      console.error("Erreur chargement références:", err);
+    }
+  };
+
+  // ===== Chargement des clients =====
+  const loadClients = async () => {
+    if (!user) return;
     setLoading(true);
     setError("");
     try {
       const { data, error } = await supabase
         .from("clients")
         .select("*")
-        .eq("country", selectedCountry.code)
         .order("client_code");
-      if (error) {
-        setError(`Erreur lors du chargement: ${error.message}`);
-        setClients([]);
-      } else {
-        setClients(data || []);
-      }
-    } catch (err) {
-      setError(`Erreur inattendue: ${err}`);
-      setClients([]);
+      if (error) throw error;
+      setClients(data || []);
+    } catch (err: any) {
+      setError(`Erreur chargement clients: ${err.message}`);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
+  // ===== Chargement des liaisons pour un client donné (documents et taxes) =====
+  const loadClientLinks = async (clientId?: string) => {
+    if (!clientId) {
+      setClientDocuments([]);
+      setClientTaxes([]);
+      return;
+    }
+    try {
+      const [docsRes, taxesRes] = await Promise.all([
+        supabase.from("client_documents").select("*").eq("client_id", clientId),
+        supabase.from("client_taxes").select("*").eq("client_id", clientId),
+      ]);
+      setClientDocuments(docsRes.data || []);
+      setClientTaxes(taxesRes.data || []);
+    } catch (err) {
+      console.error("Erreur chargement liens:", err);
+    }
+  };
+
+  // ===== Chargement initial =====
   useEffect(() => {
-    load();
-  }, [selectedCountry.code, user]); // ✅ Ajout de "user" comme dépendance
+    loadReferences();
+    loadClients();
+  }, [user]);
 
-  const filtered = clients.filter(
-    (c) =>
-      c.name.toLowerCase().includes(search.toLowerCase()) ||
-      c.client_code.toLowerCase().includes(search.toLowerCase()) ||
-      (c.manager_name &&
-        c.manager_name.toLowerCase().includes(search.toLowerCase())),
-  );
+  // Lorsqu'on ouvre le modal avec un client existant, charger ses liens
+  useEffect(() => {
+    if (modal.open && modal.client?.id) {
+      loadClientLinks(modal.client.id);
+    } else {
+      // Nouveau client : réinitialiser les liens
+      setClientDocuments([]);
+      setClientTaxes([]);
+    }
+  }, [modal.open, modal.client?.id]);
 
+  // ===== Génération du code client =====
+  const generateClientCode = async (countryCode: string) => {
+    const { data, error } = await supabase
+      .from("clients")
+      .select("client_code")
+      .like("client_code", `${countryCode}%`)
+      .order("client_code", { ascending: false })
+      .limit(1);
+
+    if (error) {
+      console.error("Erreur génération code:", error);
+      return `${countryCode}00001`;
+    }
+
+    let nextNum = 1;
+    if (data && data.length > 0) {
+      const lastCode = data[0].client_code;
+      const match = lastCode.match(/\d+$/);
+      if (match) nextNum = parseInt(match[0]) + 1;
+    }
+    return `${countryCode}${String(nextNum).padStart(5, "0")}`;
+  };
+
+  // ===== Ouverture du modal =====
   const openAdd = async () => {
     try {
-      const { data, error } = await supabase
-        .from("clients")
-        .select("client_code")
-        .eq("country", selectedCountry.code)
-        .order("client_code", { ascending: false })
-        .limit(1);
-
-      if (error) console.error("Erreur lors du calcul du code client :", error);
-
-      let nextNum = 1;
-      if (data && data.length > 0) {
-        const lastCode = data[0].client_code;
-        const match = lastCode.match(/\d+$/);
-        if (match) nextNum = parseInt(match[0]) + 1;
-      }
-
-      const prefix = selectedCountry.clientPrefix || "C";
-      const nextCode = `${prefix}${String(nextNum).padStart(5, "0")}`;
+      const defaultCountry = selectedCountry?.code || "CMR";
+      const nextCode = await generateClientCode(defaultCountry);
       const currentYear = new Date().getFullYear();
       const contractRef = `CONTRAT/${currentYear}/${nextCode}`;
 
@@ -131,19 +289,20 @@ export default function ClientsPage() {
         open: true,
         client: {
           client_code: nextCode,
-          country: selectedCountry.code,
+          country: defaultCountry,
           contract_ref: contractRef,
           manager_name: "",
           email: "",
           phone: "",
           city: "",
           rue: "",
-          forme_juridique: "",
+          forme_juridique_id: null,
+          nature_id: null,
           obligation_300_salaries: false,
           obligation_consolidee: false,
           obligation_ca_18000ke: false,
-          statut_fiscal: "",
-          regime_fiscal: "",
+          statut_fiscal_id: null,
+          regime_fiscal_id: null,
           nb_salaries: 0,
           decalage_paie: false,
           jour_versement_salaires: "",
@@ -166,8 +325,8 @@ export default function ClientsPage() {
       });
       setActiveTab("general");
     } catch (err) {
-      console.error("Erreur lors de l'ouverture du modal client :", err);
-      setError("Impossible d'initialiser le nouveau client. Réessayez.");
+      console.error("Erreur ouverture modal:", err);
+      setError("Impossible d'initialiser le nouveau client.");
     }
   };
 
@@ -176,37 +335,90 @@ export default function ClientsPage() {
     setActiveTab("general");
   };
 
+  // ===== Suppression =====
   const handleDelete = async (clientId: string, clientName: string) => {
-    if (
-      !confirm(
-        `Supprimer définitivement le client "${clientName}" ? Cette action est irréversible.`,
-      )
-    )
-      return;
+    if (!confirm(`Supprimer définitivement "${clientName}" ?`)) return;
     setLoading(true);
     try {
-      const { error: deleteError } = await supabase
+      const { error } = await supabase
         .from("clients")
         .delete()
         .eq("id", clientId);
-      if (deleteError) {
-        setError(`Erreur lors de la suppression : ${deleteError.message}`);
-      } else {
-        await load();
-        void addNotification({
-          title: "Client supprimé",
-          message: `Le client "${clientName}" a été supprimé.`,
-          type: "client",
-        });
-      }
-    } catch (err) {
-      console.error("Erreur lors de la suppression du client :", err);
-      setError("Impossible de supprimer le client. Réessayez.");
+      if (error) throw error;
+      await loadClients();
+      await addNotification({
+        title: "Client supprimé",
+        message: `Le client "${clientName}" a été supprimé.`,
+        type: "client",
+      });
+    } catch (err: any) {
+      setError(`Erreur suppression: ${err.message}`);
     } finally {
       setLoading(false);
     }
   };
 
+  // ===== Gestion des champs du client =====
+  const updateField = (field: keyof Client, value: any) => {
+    setModal((m) => ({ ...m, client: { ...m.client, [field]: value } }));
+  };
+
+  // ===== Gestion du changement de pays (regénère le code) =====
+  const handleCountryChange = async (countryCode: string) => {
+    const newCode = await generateClientCode(countryCode);
+    const currentYear = new Date().getFullYear();
+    updateField("country", countryCode);
+    updateField("client_code", newCode);
+    updateField("contract_ref", `CONTRAT/${currentYear}/${newCode}`);
+  };
+
+  // ===== Gestion des documents (checklist) =====
+  const handleDocumentStatusChange = (
+    documentId: number,
+    status: "a_fournir" | "fourni" | "non_applicable",
+  ) => {
+    // Mettre à jour l'état local
+    const existing = clientDocuments.find((d) => d.document_id === documentId);
+    if (existing) {
+      setClientDocuments((prev) =>
+        prev.map((d) => (d.document_id === documentId ? { ...d, status } : d)),
+      );
+    } else {
+      // Nouveau document, pas encore en base (sera créé à la sauvegarde)
+      // On ajoute un objet temporaire sans id
+      setClientDocuments((prev) => [
+        ...prev,
+        {
+          id: 0,
+          client_id: modal.client?.id || "",
+          document_id: documentId,
+          status,
+        } as ClientDocument,
+      ]);
+    }
+  };
+
+  // ===== Gestion des taxes (assujetti) =====
+  const handleTaxeChange = (taxeId: number, assujetti: boolean) => {
+    const existing = clientTaxes.find((t) => t.taxe_id === taxeId);
+    if (existing) {
+      setClientTaxes((prev) =>
+        prev.map((t) => (t.taxe_id === taxeId ? { ...t, assujetti } : t)),
+      );
+    } else {
+      setClientTaxes((prev) => [
+        ...prev,
+        {
+          id: 0,
+          client_id: modal.client?.id || "",
+          taxe_id: taxeId,
+          assujetti,
+        } as ClientTaxe,
+      ]);
+    }
+  };
+
+  // ===== Sauvegarde du client et de ses liaisons =====
   const handleSave = async () => {
     if (!modal.client?.name?.trim()) {
       setError("Le nom est requis");
@@ -215,13 +427,11 @@ export default function ClientsPage() {
     setSaving(true);
     setError("");
 
-    // Convert empty string to null for date field
-    const datePaye = modal.client.date_paye || null;
-
-    const payload = {
+    // Construction du payload client
+    const payload: any = {
       client_code: modal.client.client_code || "",
       name: modal.client.name || "",
-      country: modal.client.country || selectedCountry.code,
+      country: modal.client.country || "CMR",
       address_bp: modal.client.address_bp || "",
       nui: modal.client.nui || "",
       rccm: modal.client.rccm || "",
@@ -231,16 +441,17 @@ export default function ClientsPage() {
       phone: modal.client.phone || "",
       city: modal.client.city || "",
       rue: modal.client.rue || "",
-      forme_juridique: modal.client.forme_juridique || "",
+      forme_juridique_id: modal.client.forme_juridique_id || null,
+      nature_id: modal.client.nature_id || null,
       obligation_300_salaries: modal.client.obligation_300_salaries || false,
       obligation_consolidee: modal.client.obligation_consolidee || false,
       obligation_ca_18000ke: modal.client.obligation_ca_18000ke || false,
-      statut_fiscal: modal.client.statut_fiscal || "",
-      regime_fiscal: modal.client.regime_fiscal || "",
+      statut_fiscal_id: modal.client.statut_fiscal_id || null,
+      regime_fiscal_id: modal.client.regime_fiscal_id || null,
       nb_salaries: modal.client.nb_salaries || 0,
       decalage_paie: modal.client.decalage_paie || false,
       jour_versement_salaires: modal.client.jour_versement_salaires || "",
-      date_paye: datePaye,
+      date_paye: modal.client.date_paye || null,
       option_versement_mensuel: modal.client.option_versement_mensuel || false,
       entreprise_travail_temporaire:
         modal.client.entreprise_travail_temporaire || false,
@@ -263,62 +474,112 @@ export default function ClientsPage() {
       status: modal.client.status || "active",
     };
 
-    let isUpdate = !!modal.client.id;
+    let clientId = modal.client.id;
     let clientName = modal.client.name || "";
 
     try {
-      if (isUpdate && modal.client.id) {
+      // 1. Sauvegarder le client
+      if (clientId) {
         const { error: updateError } = await supabase
           .from("clients")
           .update(payload)
-          .eq("id", modal.client.id);
-        if (updateError) {
-          setError(`Erreur lors de la mise à jour : ${updateError.message}`);
-          return;
-        }
-        void addNotification({
-          title: "Client modifié",
-          message: `Le client "${clientName}" a été mis à jour.`,
-          type: "client",
-        });
+          .eq("id", clientId);
+        if (updateError) throw updateError;
       } else {
         const { data: inserted, error: insertError } = await supabase
           .from("clients")
           .insert(payload)
-          .select("name")
+          .select("id, name")
           .single();
-        if (insertError) {
-          setError(`Erreur lors de l'enregistrement : ${insertError.message}`);
-          return;
-        }
-        if (inserted) {
-          clientName = (inserted as any).name || clientName;
-        }
-        void addNotification({
-          title: "Nouveau client",
-          message: `Le client "${clientName}" a été ajouté.`,
-          type: "client",
-        });
+        if (insertError) throw insertError;
+        clientId = inserted.id;
+        clientName = inserted.name || clientName;
       }
+
+      // 2. Sauvegarder les documents (client_documents)
+      // On supprime d'abord les existants (ou on fait upsert)
+      // Pour simplifier, on supprime tous les liens pour ce client puis on réinsère
+      // (ou on pourrait faire un upsert)
+      if (clientId) {
+        // Supprimer les anciennes entrées
+        await supabase
+          .from("client_documents")
+          .delete()
+          .eq("client_id", clientId);
+
+        // Préparer les nouvelles entrées
+        const docsToInsert = clientDocuments
+          .filter((d) => d.status && d.document_id)
+          .map((d) => ({
+            client_id: clientId,
+            document_id: d.document_id,
+            status: d.status,
+            date_fourni:
+              d.status === "fourni"
+                ? new Date().toISOString().split("T")[0]
+                : null,
+            commentaire: null,
+          }));
+        if (docsToInsert.length > 0) {
+          const { error: docsError } = await supabase
+            .from("client_documents")
+            .insert(docsToInsert);
+          if (docsError) throw docsError;
+        }
+
+        // 3. Sauvegarder les taxes (client_taxes)
+        await supabase.from("client_taxes").delete().eq("client_id", clientId);
+
+        const taxesToInsert = clientTaxes
+          .filter((t) => t.assujetti !== undefined && t.taxe_id)
+          .map((t) => ({
+            client_id: clientId,
+            taxe_id: t.taxe_id,
+            assujetti: t.assujetti,
+            date_derniere_declaration: null,
+            commentaire: null,
+          }));
+        if (taxesToInsert.length > 0) {
+          const { error: taxesError } = await supabase
+            .from("client_taxes")
+            .insert(taxesToInsert);
+          if (taxesError) throw taxesError;
+        }
+      }
+
+      await addNotification({
+        title: clientId ? "Client modifié" : "Nouveau client",
+        message: `Le client "${clientName}" a été ${clientId ? "mis à jour" : "ajouté"}.`,
+        type: "client",
+      });
+
       setModal({ open: false, client: null });
-      await load();
-    } catch (err) {
-      console.error("Erreur lors de l'enregistrement du client :", err);
-      setError("Impossible d'enregistrer le client. Réessayez.");
+      await loadClients();
+    } catch (err: any) {
+      setError(`Erreur lors de l'enregistrement : ${err.message}`);
     } finally {
       setSaving(false);
     }
   };
 
-  const updateField = (field: keyof Client, value: any) => {
-    setModal((m) => ({ ...m, client: { ...m.client, [field]: value } }));
-  };
+  // ===== Filtrage des clients =====
+  const filtered = clients.filter((c) => {
+    const matchSearch =
+      c.name.toLowerCase().includes(search.toLowerCase()) ||
+      c.client_code.toLowerCase().includes(search.toLowerCase()) ||
+      (c.manager_name &&
+        c.manager_name.toLowerCase().includes(search.toLowerCase()));
+    const matchCountry = filterCountry === "all" || c.country === filterCountry;
+    const matchNature = filterNature === "all" || c.nature === filterNature;
+    return matchSearch && matchCountry && matchNature;
+  });
 
+  // ===== Rendu =====
   return (
     <div className="page-container">
       <PageHeader
         title="Clients"
-        description={`${selectedCountry.flag} ${selectedCountry.name} – Gestion des clients`}
+        description="Gestion des clients internationaux"
         actions={
           <button
             onClick={openAdd}
@@ -330,17 +591,43 @@ export default function ClientsPage() {
         }
       />
 
-      {/* Barre de recherche */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-6">
+      {/* Filtres et recherche */}
+      <div className="flex flex-wrap gap-3 mb-6">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Rechercher par nom, code client ou gérant..."
+            placeholder="Rechercher..."
             className="auth-input w-full pl-10 pr-4 py-2.5 text-white bg-slate-800 border-slate-600 focus:border-primary-500"
           />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <select
+            value={filterCountry}
+            onChange={(e) => setFilterCountry(e.target.value)}
+            className="auth-input py-2.5 px-3 text-white bg-slate-800 border-slate-600 focus:border-primary-500 rounded-lg"
+          >
+            <option value="all">🌍 Tous les pays</option>
+            {COUNTRIES.map((c) => (
+              <option key={c.code} value={c.code}>
+                {c.flag} {c.label}
+              </option>
+            ))}
+          </select>
+          <select
+            value={filterNature}
+            onChange={(e) => setFilterNature(e.target.value)}
+            className="auth-input py-2.5 px-3 text-white bg-slate-800 border-slate-600 focus:border-primary-500 rounded-lg"
+          >
+            <option value="all">📋 Toutes les natures</option>
+            {NATURE_OPTIONS.map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -350,6 +637,7 @@ export default function ClientsPage() {
         </div>
       )}
 
+      {/* Tableau des clients */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
         {loading ? (
           <div className="p-6 space-y-2">
@@ -363,11 +651,8 @@ export default function ClientsPage() {
         ) : filtered.length === 0 ? (
           <EmptyState
             title="Aucun client"
-            description="Ajoutez votre premier client pour commencer."
-            action={{
-              label: "Ajouter un client",
-              onClick: openAdd,
-            }}
+            description="Ajoutez votre premier client."
+            action={{ label: "Ajouter un client", onClick: openAdd }}
           />
         ) : (
           <div className="overflow-x-auto">
@@ -376,72 +661,79 @@ export default function ClientsPage() {
                 <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
                   <th className="text-left px-6 py-3 font-medium">Code</th>
                   <th className="text-left px-4 py-3 font-medium">Nom</th>
+                  <th className="text-left px-4 py-3 font-medium">Pays</th>
+                  <th className="text-left px-4 py-3 font-medium">Nature</th>
                   <th className="text-left px-4 py-3 font-medium hidden lg:table-cell">
                     Gérant
                   </th>
                   <th className="text-left px-4 py-3 font-medium hidden md:table-cell">
                     Ville
                   </th>
-                  <th className="text-left px-4 py-3 font-medium hidden xl:table-cell">
-                    Email
-                  </th>
-                  <th className="text-left px-4 py-3 font-medium hidden 2xl:table-cell">
-                    Téléphone
-                  </th>
                   <th className="text-right px-6 py-3 font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {filtered.map((client) => (
-                  <tr
-                    key={client.id}
-                    className="hover:bg-slate-50 transition-colors"
-                  >
-                    <td className="px-6 py-3 font-mono text-xs text-slate-600">
-                      {client.client_code}
-                    </td>
-                    <td className="px-4 py-3 font-medium text-slate-800">
-                      {client.name}
-                    </td>
-                    <td className="px-4 py-3 text-slate-500 hidden lg:table-cell">
-                      {client.manager_name || "—"}
-                    </td>
-                    <td className="px-4 py-3 text-slate-500 hidden md:table-cell">
-                      {client.city || "—"}
-                    </td>
-                    <td className="px-4 py-3 text-slate-500 hidden xl:table-cell">
-                      {client.email || "—"}
-                    </td>
-                    <td className="px-4 py-3 text-slate-500 hidden 2xl:table-cell">
-                      {client.phone || "—"}
-                    </td>
-                    <td className="px-6 py-3 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => openEdit(client)}
-                          className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                          title="Modifier"
-                        >
-                          <Edit2 size={14} />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(client.id, client.name)}
-                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                          title="Supprimer"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {filtered.map((client) => {
+                  const countryInfo = COUNTRIES.find(
+                    (c) => c.code === client.country,
+                  );
+                  return (
+                    <tr
+                      key={client.id}
+                      className="hover:bg-slate-50 transition-colors"
+                    >
+                      <td className="px-6 py-3 font-mono text-xs text-slate-600">
+                        {client.client_code}
+                      </td>
+                      <td className="px-4 py-3 font-medium text-slate-800">
+                        {client.name}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {countryInfo ? (
+                          <span className="flex items-center gap-1">
+                            {countryInfo.flag} {countryInfo.label}
+                          </span>
+                        ) : (
+                          client.country
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {client.nature || "-"}
+                      </td>
+                      <td className="px-4 py-3 text-slate-500 hidden lg:table-cell">
+                        {client.manager_name || "—"}
+                      </td>
+                      <td className="px-4 py-3 text-slate-500 hidden md:table-cell">
+                        {client.city || "—"}
+                      </td>
+                      <td className="px-6 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => openEdit(client)}
+                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                            title="Modifier"
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(client.id, client.name)}
+                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                            title="Supprimer"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
       </div>
 
-      {/* Modal d’ajout / modification (conserve le même contenu) */}
+      {/* ========== MODAL AJOUT / MODIFICATION ========== */}
       {modal.open && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
@@ -460,35 +752,33 @@ export default function ClientsPage() {
             {/* Tabs */}
             <div className="border-b border-slate-100 px-6">
               <div className="flex gap-6">
-                {["general", "juridiques", "fiscales", "sociales"].map(
-                  (tab) => (
-                    <button
-                      key={tab}
-                      onClick={() =>
-                        setActiveTab(
-                          tab as
-                            | "general"
-                            | "juridiques"
-                            | "fiscales"
-                            | "sociales",
-                        )
-                      }
-                      className={`py-2 text-sm font-medium transition-all ${
-                        activeTab === tab
-                          ? "text-blue-600 border-b-2 border-blue-600"
-                          : "text-slate-500 hover:text-slate-700"
-                      }`}
-                    >
-                      {tab === "general"
-                        ? "Général"
-                        : tab === "juridiques"
-                          ? "Juridiques"
-                          : tab === "fiscales"
-                            ? "Fiscales"
-                            : "Sociales & TNS"}
-                    </button>
-                  ),
-                )}
+                {[
+                  "general",
+                  "juridiques",
+                  "fiscales",
+                  "sociales",
+                  "etablissements",
+                ].map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab as any)}
+                    className={`py-2 text-sm font-medium transition-all ${
+                      activeTab === tab
+                        ? "text-blue-600 border-b-2 border-blue-600"
+                        : "text-slate-500 hover:text-slate-700"
+                    }`}
+                  >
+                    {tab === "general"
+                      ? "Général"
+                      : tab === "juridiques"
+                        ? "Juridiques"
+                        : tab === "fiscales"
+                          ? "Fiscales"
+                          : tab === "sociales"
+                            ? "Sociales & TNS"
+                            : "Établissements"}
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -499,7 +789,7 @@ export default function ClientsPage() {
                 </div>
               )}
 
-              {/* Tab Général */}
+              {/* ====== TAB GÉNÉRAL ====== */}
               {activeTab === "general" && (
                 <>
                   <div className="grid grid-cols-2 gap-4">
@@ -517,14 +807,43 @@ export default function ClientsPage() {
                       <label className="block text-xs font-medium text-slate-500 mb-1">
                         Pays
                       </label>
-                      <input
-                        value={selectedCountry.name}
-                        readOnly
-                        className="auth-input w-full px-3 py-2 text-sm bg-slate-50 text-slate-500 cursor-not-allowed"
-                      />
+                      <select
+                        value={modal.client?.country || "CMR"}
+                        onChange={async (e) =>
+                          await handleCountryChange(e.target.value)
+                        }
+                        className="auth-input w-full px-3 py-2 text-sm bg-white border-slate-300"
+                      >
+                        {COUNTRIES.map((c) => (
+                          <option key={c.code} value={c.code}>
+                            {c.flag} {c.label}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
-
+                  <div>
+                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                      Nature
+                    </label>
+                    <select
+                      value={modal.client?.nature_id || ""}
+                      onChange={(e) =>
+                        updateField(
+                          "nature_id",
+                          e.target.value ? Number(e.target.value) : null,
+                        )
+                      }
+                      className="auth-input w-full px-3 py-2 text-sm bg-white border-slate-300"
+                    >
+                      <option value="">-- Sélectionner --</option>
+                      {refs.natures.map((n) => (
+                        <option key={n.id} value={n.id}>
+                          {n.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-700 mb-1">
                       Nom / Raison sociale{" "}
@@ -537,7 +856,6 @@ export default function ClientsPage() {
                       placeholder="ACME SARL"
                     />
                   </div>
-
                   <div>
                     <label className="block text-xs font-medium text-slate-700 mb-1">
                       Nom du gérant / président
@@ -551,7 +869,6 @@ export default function ClientsPage() {
                       placeholder="Mr. TCHÉBÉ Trésor"
                     />
                   </div>
-
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-medium text-slate-700 mb-1">
@@ -577,7 +894,6 @@ export default function ClientsPage() {
                       />
                     </div>
                   </div>
-
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-medium text-slate-700 mb-1">
@@ -602,7 +918,6 @@ export default function ClientsPage() {
                       />
                     </div>
                   </div>
-
                   <div>
                     <label className="block text-xs font-medium text-slate-700 mb-1">
                       Adresse / BP
@@ -616,7 +931,6 @@ export default function ClientsPage() {
                       placeholder="BP 1234"
                     />
                   </div>
-
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-medium text-slate-700 mb-1">
@@ -641,7 +955,6 @@ export default function ClientsPage() {
                       />
                     </div>
                   </div>
-
                   <div>
                     <label className="block text-xs font-medium text-slate-700 mb-1">
                       Réf. contrat
@@ -656,7 +969,7 @@ export default function ClientsPage() {
                 </>
               )}
 
-              {/* Tab Juridiques */}
+              {/* ====== TAB JURIDIQUES ====== */}
               {activeTab === "juridiques" && (
                 <>
                   <div className="grid grid-cols-2 gap-4">
@@ -664,14 +977,23 @@ export default function ClientsPage() {
                       <label className="block text-xs font-medium text-slate-700 mb-1">
                         Forme juridique
                       </label>
-                      <input
-                        value={modal.client?.forme_juridique || ""}
+                      <select
+                        value={modal.client?.forme_juridique_id || ""}
                         onChange={(e) =>
-                          updateField("forme_juridique", e.target.value)
+                          updateField(
+                            "forme_juridique_id",
+                            e.target.value ? Number(e.target.value) : null,
+                          )
                         }
-                        className="auth-input w-full px-3 py-2 text-sm"
-                        placeholder="SARL, SA, EURL..."
-                      />
+                        className="auth-input w-full px-3 py-2 text-sm bg-white border-slate-300"
+                      >
+                        <option value="">-- Sélectionner --</option>
+                        {refs.formes.map((f) => (
+                          <option key={f.id} value={f.id}>
+                            {f.label}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-slate-700 mb-1">
@@ -710,10 +1032,56 @@ export default function ClientsPage() {
                       />
                     </div>
                   </div>
+
+                  {/* Checklist documents juridiques */}
+                  <div className="mt-4">
+                    <h4 className="font-medium text-sm text-slate-700 mb-2">
+                      Documents juridiques
+                    </h4>
+                    <div className="space-y-2 max-h-60 overflow-y-auto border rounded p-2">
+                      {refs.documents
+                        .filter(
+                          (doc) =>
+                            doc.ref_categories_documents?.label === "Juridique",
+                        )
+                        .map((doc) => {
+                          const clientDoc = clientDocuments.find(
+                            (cd) => cd.document_id === doc.id,
+                          );
+                          const status = clientDoc?.status || "a_fournir";
+                          return (
+                            <div
+                              key={doc.id}
+                              className="flex items-center gap-3 text-sm"
+                            >
+                              <span className="flex-1 text-slate-700">
+                                {doc.label}
+                              </span>
+                              <select
+                                value={status}
+                                onChange={(e) =>
+                                  handleDocumentStatusChange(
+                                    doc.id,
+                                    e.target.value as any,
+                                  )
+                                }
+                                className="border rounded px-2 py-1 text-xs bg-white"
+                              >
+                                <option value="a_fournir">À fournir</option>
+                                <option value="fourni">Fourni</option>
+                                <option value="non_applicable">
+                                  Non applicable
+                                </option>
+                              </select>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
                 </>
               )}
 
-              {/* Tab Fiscales */}
+              {/* ====== TAB FISCALES ====== */}
               {activeTab === "fiscales" && (
                 <>
                   <div className="grid grid-cols-2 gap-4">
@@ -721,27 +1089,45 @@ export default function ClientsPage() {
                       <label className="block text-xs font-medium text-slate-700 mb-1">
                         Statut fiscal
                       </label>
-                      <input
-                        value={modal.client?.statut_fiscal || ""}
+                      <select
+                        value={modal.client?.statut_fiscal_id || ""}
                         onChange={(e) =>
-                          updateField("statut_fiscal", e.target.value)
+                          updateField(
+                            "statut_fiscal_id",
+                            e.target.value ? Number(e.target.value) : null,
+                          )
                         }
-                        className="auth-input w-full px-3 py-2 text-sm"
-                        placeholder="Régime normal, réel..."
-                      />
+                        className="auth-input w-full px-3 py-2 text-sm bg-white border-slate-300"
+                      >
+                        <option value="">-- Sélectionner --</option>
+                        {refs.statuts.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.label}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-slate-700 mb-1">
                         Régime fiscal
                       </label>
-                      <input
-                        value={modal.client?.regime_fiscal || ""}
+                      <select
+                        value={modal.client?.regime_fiscal_id || ""}
                         onChange={(e) =>
-                          updateField("regime_fiscal", e.target.value)
+                          updateField(
+                            "regime_fiscal_id",
+                            e.target.value ? Number(e.target.value) : null,
+                          )
                         }
-                        className="auth-input w-full px-3 py-2 text-sm"
-                        placeholder="IR, IS, TVA..."
-                      />
+                        className="auth-input w-full px-3 py-2 text-sm bg-white border-slate-300"
+                      >
+                        <option value="">-- Sélectionner --</option>
+                        {refs.regimes.map((r) => (
+                          <option key={r.id} value={r.id}>
+                            {r.label}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
@@ -779,10 +1165,112 @@ export default function ClientsPage() {
                     />
                     Obligation 300 salariés
                   </label>
+
+                  {/* Checklist documents fiscaux */}
+                  <div className="mt-4">
+                    <h4 className="font-medium text-sm text-slate-700 mb-2">
+                      Documents fiscaux
+                    </h4>
+                    <div className="space-y-2 max-h-40 overflow-y-auto border rounded p-2">
+                      {refs.documents
+                        .filter(
+                          (doc) =>
+                            doc.ref_categories_documents?.label === "Fiscal",
+                        )
+                        .map((doc) => {
+                          const clientDoc = clientDocuments.find(
+                            (cd) => cd.document_id === doc.id,
+                          );
+                          const status = clientDoc?.status || "a_fournir";
+                          return (
+                            <div
+                              key={doc.id}
+                              className="flex items-center gap-3 text-sm"
+                            >
+                              <span className="flex-1 text-slate-700">
+                                {doc.label}
+                              </span>
+                              <select
+                                value={status}
+                                onChange={(e) =>
+                                  handleDocumentStatusChange(
+                                    doc.id,
+                                    e.target.value as any,
+                                  )
+                                }
+                                className="border rounded px-2 py-1 text-xs bg-white"
+                              >
+                                <option value="a_fournir">À fournir</option>
+                                <option value="fourni">Fourni</option>
+                                <option value="non_applicable">
+                                  Non applicable
+                                </option>
+                              </select>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+
+                  {/* Tableau des échéances fiscales */}
+                  <div className="mt-4">
+                    <h4 className="font-medium text-sm text-slate-700 mb-2">
+                      Échéances fiscales 2026
+                    </h4>
+                    <div className="max-h-60 overflow-y-auto border rounded">
+                      <table className="w-full text-sm">
+                        <thead className="bg-slate-50 sticky top-0">
+                          <tr>
+                            <th className="px-3 py-2 text-left">Impôt</th>
+                            <th className="px-3 py-2 text-left">Obligation</th>
+                            <th className="px-3 py-2 text-left">Délai</th>
+                            <th className="px-3 py-2 text-center">Assujetti</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {refs.taxes.map((taxe) => {
+                            const clientTaxe = clientTaxes.find(
+                              (ct) => ct.taxe_id === taxe.id,
+                            );
+                            const isChecked = clientTaxe?.assujetti || false;
+                            return (
+                              <tr
+                                key={taxe.id}
+                                className="border-t border-slate-100"
+                              >
+                                <td className="px-3 py-2 text-slate-800">
+                                  {taxe.libelle}
+                                </td>
+                                <td className="px-3 py-2 text-slate-600">
+                                  {taxe.obligation}
+                                </td>
+                                <td className="px-3 py-2 text-slate-600">
+                                  {taxe.deadline}
+                                </td>
+                                <td className="px-3 py-2 text-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={(e) =>
+                                      handleTaxeChange(
+                                        taxe.id,
+                                        e.target.checked,
+                                      )
+                                    }
+                                    className="form-checkbox h-4 w-4 text-blue-600"
+                                  />
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 </>
               )}
 
-              {/* Tab Sociales & TNS */}
+              {/* ====== TAB SOCIALES & TNS ====== */}
               {activeTab === "sociales" && (
                 <>
                   <div className="grid grid-cols-2 gap-4">
@@ -1021,10 +1509,67 @@ export default function ClientsPage() {
                     />
                     Versement 1% CDD
                   </label>
+
+                  {/* Checklist documents sociaux */}
+                  <div className="mt-4">
+                    <h4 className="font-medium text-sm text-slate-700 mb-2">
+                      Documents sociaux
+                    </h4>
+                    <div className="space-y-2 max-h-60 overflow-y-auto border rounded p-2">
+                      {refs.documents
+                        .filter(
+                          (doc) =>
+                            doc.ref_categories_documents?.label === "Social",
+                        )
+                        .map((doc) => {
+                          const clientDoc = clientDocuments.find(
+                            (cd) => cd.document_id === doc.id,
+                          );
+                          const status = clientDoc?.status || "a_fournir";
+                          return (
+                            <div
+                              key={doc.id}
+                              className="flex items-center gap-3 text-sm"
+                            >
+                              <span className="flex-1 text-slate-700">
+                                {doc.label}
+                              </span>
+                              <select
+                                value={status}
+                                onChange={(e) =>
+                                  handleDocumentStatusChange(
+                                    doc.id,
+                                    e.target.value as any,
+                                  )
+                                }
+                                className="border rounded px-2 py-1 text-xs bg-white"
+                              >
+                                <option value="a_fournir">À fournir</option>
+                                <option value="fourni">Fourni</option>
+                                <option value="non_applicable">
+                                  Non applicable
+                                </option>
+                              </select>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
                 </>
+              )}
+
+              {/* ====== TAB ÉTABLISSEMENTS ====== */}
+              {activeTab === "etablissements" && (
+                <EtablissementsSection
+                  clientId={modal.client?.id || ""}
+                  onEtablissementsChange={() => {
+                    // Optionnel
+                  }}
+                />
               )}
             </div>
 
+            {/* Footer du modal */}
             <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-100">
               <button
                 onClick={() => setModal({ open: false, client: null })}

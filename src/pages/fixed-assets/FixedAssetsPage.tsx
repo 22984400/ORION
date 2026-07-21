@@ -19,6 +19,12 @@ import { supabase } from "../../lib/supabase";
 import { addNotification } from "../../lib/notifications";
 import type { FixedAsset } from "../../types";
 
+// Hooks pour l'amortissement
+import {
+  useDepreciationSchedule,
+  useGenerateDepreciation,
+} from "../../hooks/useDepreciation";
+
 // Recharts
 import {
   PieChart,
@@ -36,7 +42,22 @@ import {
 
 // ==================== TYPES LOCAUX ====================
 
-interface ExtendedFixedAsset extends FixedAsset {
+type AssetStatus = "Draft" | "Active" | "In_Maintenance" | "Disposed";
+type AmortizationMethod = "lineaire" | "degressif";
+
+interface ExtendedFixedAsset {
+  id: string;
+  asset_code: string;
+  asset_name: string;
+  category: string;
+  nature?: string;
+  purchase_value: number;
+  currency: string;
+  status: AssetStatus;
+  created_at: string;
+  acquisition_date?: string;
+  net_book_value?: number;
+  // Champs supplémentaires
   family?: string | null;
   location?: string | null;
   invoice_number?: string | null;
@@ -45,8 +66,12 @@ interface ExtendedFixedAsset extends FixedAsset {
   acquisition_mode?: string;
   residual_value?: number;
   useful_life_years?: number;
+  depreciation_rate?: number;
+  amortization_method?: AmortizationMethod;
 }
 
+// Défini pour être utilisé par le hook, mais on le garde pour le typage
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 interface DepreciationEntry {
   id: string;
   asset_id: string;
@@ -83,7 +108,7 @@ interface AssetDisposal {
 
 export function FixedAssetsPage() {
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | AssetStatus>("all");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<ExtendedFixedAsset | null>(
@@ -101,7 +126,6 @@ export function FixedAssetsPage() {
   const [likedAssets, setLikedAssets] = useState<Set<string>>(new Set());
 
   // Sous‑données
-  const [depreciationSchedule] = useState<DepreciationEntry[]>([]);
   const [movements] = useState<AssetMovement[]>([]);
   const [disposal] = useState<AssetDisposal | null>(null);
 
@@ -109,6 +133,7 @@ export function FixedAssetsPage() {
   const [formData, setFormData] = useState<Partial<ExtendedFixedAsset>>({
     asset_name: "",
     category: "",
+    nature: "",
     family: "",
     location: "",
     invoice_number: "",
@@ -119,6 +144,9 @@ export function FixedAssetsPage() {
     account_code: "",
     acquisition_mode: "Achat",
     residual_value: 0,
+    useful_life_years: 10,
+    depreciation_rate: undefined,
+    amortization_method: "lineaire",
     status: "Draft",
   });
 
@@ -133,18 +161,34 @@ export function FixedAssetsPage() {
     orderAsc: false,
   });
 
-  // Enrichissement des actifs
-  const assets: ExtendedFixedAsset[] = assetsRaw.map((asset) => ({
-    ...asset,
-    useful_life_years: 10,
-    family: (asset as any).family || null,
-    location: (asset as any).location || null,
-    invoice_number: (asset as any).invoice_number || null,
-    service_date: (asset as any).service_date || asset.acquisition_date || "",
-    account_code: (asset as any).account_code || null,
-    acquisition_mode: (asset as any).acquisition_mode || "Achat",
-    residual_value: (asset as any).residual_value || 0,
-  }));
+  // Enrichissement des actifs avec typage correct et valeurs par défaut
+  const assets: ExtendedFixedAsset[] = assetsRaw.map((asset) => {
+    const status = (asset.status || "Draft") as AssetStatus;
+    const currency = asset.currency ? String(asset.currency) : "XAF";
+    return {
+      id: asset.id || "",
+      asset_code: asset.asset_code || "",
+      asset_name: asset.asset_name || "",
+      category: asset.category || "",
+      nature: (asset as any).nature || undefined,
+      purchase_value: asset.purchase_value || 0,
+      currency,
+      status,
+      created_at: asset.created_at || new Date().toISOString(),
+      acquisition_date: asset.acquisition_date || "",
+      net_book_value: asset.net_book_value || 0,
+      family: (asset as any).family || null,
+      location: (asset as any).location || null,
+      invoice_number: (asset as any).invoice_number || null,
+      service_date: (asset as any).service_date || asset.acquisition_date || "",
+      account_code: (asset as any).account_code || null,
+      acquisition_mode: (asset as any).acquisition_mode || "Achat",
+      residual_value: (asset as any).residual_value || 0,
+      useful_life_years: (asset as any).useful_life_years || 10,
+      depreciation_rate: (asset as any).depreciation_rate || undefined,
+      amortization_method: (asset as any).amortization_method || "lineaire",
+    };
+  });
 
   // Statistiques
   const totalPurchase = assets.reduce((s, a) => s + (a.purchase_value || 0), 0);
@@ -221,6 +265,13 @@ export function FixedAssetsPage() {
     return matchSearch && matchStatus;
   });
 
+  // ==================== HOOKS AMORTISSEMENT ====================
+
+  const { data: depreciationSchedule = [] } = useDepreciationSchedule(
+    selectedAsset?.id || "",
+  );
+  const generateMutation = useGenerateDepreciation();
+
   // ==================== ACTIONS ====================
 
   const handleCreate = async () => {
@@ -232,6 +283,7 @@ export function FixedAssetsPage() {
         asset_code: code,
         asset_name: formData.asset_name || "",
         category: formData.category || "",
+        nature: formData.nature || null,
         family: formData.family || null,
         location: formData.location || null,
         invoice_number: formData.invoice_number || null,
@@ -242,7 +294,10 @@ export function FixedAssetsPage() {
         account_code: formData.account_code || null,
         acquisition_mode: formData.acquisition_mode || "Achat",
         residual_value: formData.residual_value || 0,
-        status: "Draft",
+        useful_life_years: formData.useful_life_years || 10,
+        depreciation_rate: formData.depreciation_rate || null,
+        amortization_method: formData.amortization_method || "lineaire",
+        status: "Draft" as AssetStatus,
       };
 
       const { error } = await supabase.from("fixed_assets").insert([payload]);
@@ -260,6 +315,7 @@ export function FixedAssetsPage() {
         setFormData({
           asset_name: "",
           category: "",
+          nature: "",
           family: "",
           location: "",
           invoice_number: "",
@@ -270,6 +326,9 @@ export function FixedAssetsPage() {
           account_code: "",
           acquisition_mode: "Achat",
           residual_value: 0,
+          useful_life_years: 10,
+          depreciation_rate: undefined,
+          amortization_method: "lineaire",
           status: "Draft",
         });
       }
@@ -285,6 +344,7 @@ export function FixedAssetsPage() {
       const payload = {
         asset_name: formData.asset_name || selectedAsset.asset_name,
         category: formData.category || selectedAsset.category,
+        nature: formData.nature || null,
         family: formData.family || null,
         location: formData.location || null,
         invoice_number: formData.invoice_number || null,
@@ -296,6 +356,9 @@ export function FixedAssetsPage() {
         account_code: formData.account_code || null,
         acquisition_mode: formData.acquisition_mode || "Achat",
         residual_value: formData.residual_value || 0,
+        useful_life_years: formData.useful_life_years || 10,
+        depreciation_rate: formData.depreciation_rate || null,
+        amortization_method: formData.amortization_method || "lineaire",
       };
 
       const { error } = await supabase
@@ -341,15 +404,22 @@ export function FixedAssetsPage() {
   const handleValidate = async (id: string) => {
     const { error } = await supabase
       .from("fixed_assets")
-      .update({ status: "Active" })
+      .update({ status: "Active" as AssetStatus })
       .eq("id", id);
     if (error) {
       alert("Erreur : " + error.message);
       console.error("Validate error:", error);
     } else {
+      try {
+        await generateMutation.mutateAsync(id);
+      } catch (err) {
+        console.error("Erreur génération du plan d'amortissement :", err);
+      }
+
       void addNotification({
         title: "Immobilisation validée",
-        message: "L'immobilisation a été validée.",
+        message:
+          "L'immobilisation a été validée et le plan d'amortissement généré.",
         type: "asset",
       });
       refetch();
@@ -359,12 +429,19 @@ export function FixedAssetsPage() {
   const handleStatusChange = async (id: string, newStatus: string) => {
     const { error } = await supabase
       .from("fixed_assets")
-      .update({ status: newStatus })
+      .update({ status: newStatus as AssetStatus })
       .eq("id", id);
     if (error) {
       alert("Erreur : " + error.message);
       console.error("Status update error:", error);
     } else {
+      if (newStatus === "Active") {
+        try {
+          await generateMutation.mutateAsync(id);
+        } catch (err) {
+          console.error("Erreur génération du plan d'amortissement :", err);
+        }
+      }
       void addNotification({
         title: "Statut d'immobilisation modifié",
         message: `Le statut de l'immobilisation a été changé en ${newStatus}.`,
@@ -402,7 +479,6 @@ export function FixedAssetsPage() {
           description="Suivez les actifs et les amortissements"
         />
         <div className="flex items-center gap-2">
-          {/* Toggle View */}
           <button
             onClick={() => setViewMode("list")}
             className={cn(
@@ -436,7 +512,6 @@ export function FixedAssetsPage() {
         </div>
       </div>
 
-      {/* Statistiques (always visible) */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         {[
           {
@@ -462,7 +537,6 @@ export function FixedAssetsPage() {
         ))}
       </div>
 
-      {/* Filtres (only in list view) */}
       {viewMode === "list" && (
         <div className="flex flex-col sm:flex-row gap-3 mb-6">
           <div className="relative flex-1 max-w-sm">
@@ -480,7 +554,7 @@ export function FixedAssetsPage() {
               (s) => (
                 <button
                   key={s}
-                  onClick={() => setStatusFilter(s)}
+                  onClick={() => setStatusFilter(s as any)}
                   className={cn(
                     "px-3 py-2 rounded-lg text-sm transition-colors",
                     statusFilter === s
@@ -504,7 +578,6 @@ export function FixedAssetsPage() {
         </div>
       )}
 
-      {/* ==================== VUE LISTE ==================== */}
       {viewMode === "list" && (
         <div className="card overflow-hidden">
           <div className="overflow-x-auto">
@@ -514,6 +587,7 @@ export function FixedAssetsPage() {
                   {[
                     "Code",
                     "Actif",
+                    "Nature",
                     "Catégorie",
                     "Valeur",
                     "Amortissement",
@@ -545,6 +619,9 @@ export function FixedAssetsPage() {
                       </td>
                       <td className="px-4 py-3 font-medium text-slate-100">
                         {asset.asset_name}
+                      </td>
+                      <td className="px-4 py-3 text-slate-300">
+                        {asset.nature || "-"}
                       </td>
                       <td className="px-4 py-3 text-slate-300">
                         {asset.category}
@@ -579,7 +656,6 @@ export function FixedAssetsPage() {
                                   ? "Maintenance"
                                   : "Brouillon"}
                           </Badge>
-                          {/* Status dropdown */}
                           <select
                             value={asset.status || "Draft"}
                             onChange={(e) =>
@@ -647,10 +723,8 @@ export function FixedAssetsPage() {
         </div>
       )}
 
-      {/* ==================== VUE TABLEAU DE BORD ==================== */}
       {viewMode === "dashboard" && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Pie: Répartition par catégorie */}
           <div className="card p-4">
             <h3 className="text-sm font-semibold text-slate-300 mb-4">
               Répartition par catégorie
@@ -666,10 +740,10 @@ export function FixedAssetsPage() {
                   outerRadius={80}
                   fill="#8884d8"
                   label={({ name, percent }) =>
-                    `${name} ${(percent * 100).toFixed(0)}%`
+                    `${name} ${((percent ?? 0) * 100).toFixed(0)}%`
                   }
                 >
-                  {categoryChartData.map((entry, index) => (
+                  {categoryChartData.map((_entry, index) => (
                     <Cell
                       key={`cell-${index}`}
                       fill={COLORS[index % COLORS.length]}
@@ -684,7 +758,6 @@ export function FixedAssetsPage() {
             </ResponsiveContainer>
           </div>
 
-          {/* Bar: Valeur par catégorie */}
           <div className="card p-4">
             <h3 className="text-sm font-semibold text-slate-300 mb-4">
               Valeur d'acquisition par catégorie
@@ -701,7 +774,7 @@ export function FixedAssetsPage() {
                   formatter={(value) => formatCurrency(value as number)}
                 />
                 <Bar dataKey="value" fill="#3b82f6">
-                  {valueChartData.map((entry, index) => (
+                  {valueChartData.map((_entry, index) => (
                     <Cell
                       key={`cell-${index}`}
                       fill={COLORS[index % COLORS.length]}
@@ -712,7 +785,6 @@ export function FixedAssetsPage() {
             </ResponsiveContainer>
           </div>
 
-          {/* Pie: Statut des actifs */}
           <div className="card p-4">
             <h3 className="text-sm font-semibold text-slate-300 mb-4">
               Répartition par statut
@@ -728,10 +800,10 @@ export function FixedAssetsPage() {
                   outerRadius={80}
                   fill="#8884d8"
                   label={({ name, percent }) =>
-                    `${name} ${(percent * 100).toFixed(0)}%`
+                    `${name} ${((percent ?? 0) * 100).toFixed(0)}%`
                   }
                 >
-                  {statusChartData.map((entry, index) => (
+                  {statusChartData.map((_entry, index) => (
                     <Cell
                       key={`cell-${index}`}
                       fill={COLORS[index % COLORS.length]}
@@ -744,7 +816,6 @@ export function FixedAssetsPage() {
             </ResponsiveContainer>
           </div>
 
-          {/* Additional KPI cards */}
           <div className="card p-4 flex flex-col justify-center">
             <h3 className="text-sm font-semibold text-slate-300 mb-2">
               Indicateurs clés
@@ -785,7 +856,6 @@ export function FixedAssetsPage() {
         </div>
       )}
 
-      {/* ==================== MODAL CRÉATION ==================== */}
       {showCreateModal && (
         <div
           className="modal-overlay"
@@ -831,6 +901,26 @@ export function FixedAssetsPage() {
                     <option value="corporelle">Corporelle</option>
                     <option value="incorporelle">Incorporelle</option>
                     <option value="financiere">Financière</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">
+                    Nature
+                  </label>
+                  <select
+                    value={formData.nature || ""}
+                    onChange={(e) =>
+                      setFormData({ ...formData, nature: e.target.value })
+                    }
+                    className="input-md w-full"
+                  >
+                    <option value="">-- Sélectionner --</option>
+                    <option value="building">Bâtiment</option>
+                    <option value="equipment">Équipement</option>
+                    <option value="vehicle">Véhicule</option>
+                    <option value="furniture">Mobilier</option>
+                    <option value="it">Matériel IT</option>
+                    <option value="other">Autre</option>
                   </select>
                 </div>
                 <div>
@@ -991,6 +1081,68 @@ export function FixedAssetsPage() {
                     className="input-md w-full"
                   />
                 </div>
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">
+                    Durée d'amortissement (années)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={formData.useful_life_years || 10}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        useful_life_years: parseInt(e.target.value) || 10,
+                      })
+                    }
+                    className="input-md w-full"
+                    placeholder="10"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">
+                    Taux d'amortissement (%)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={formData.depreciation_rate ?? ""}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        depreciation_rate:
+                          e.target.value !== ""
+                            ? parseFloat(e.target.value)
+                            : undefined,
+                      })
+                    }
+                    className="input-md w-full"
+                    placeholder="Ex: 10 (pour 10%)"
+                  />
+                  <p className="text-xs text-slate-400 mt-1">
+                    Laissez vide pour un calcul automatique basé sur la durée.
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">
+                    Méthode d'amortissement
+                  </label>
+                  <select
+                    value={formData.amortization_method || "lineaire"}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        amortization_method: e.target
+                          .value as AmortizationMethod,
+                      })
+                    }
+                    className="input-md w-full"
+                  >
+                    <option value="lineaire">Linéaire</option>
+                    <option value="degressif">Dégressif</option>
+                  </select>
+                </div>
               </div>
               <div className="flex justify-end gap-2">
                 <button
@@ -1009,7 +1161,6 @@ export function FixedAssetsPage() {
         </div>
       )}
 
-      {/* ==================== MODAL DÉTAIL ==================== */}
       {showDetailModal && selectedAsset && (
         <div
           className="modal-overlay"
@@ -1068,6 +1219,10 @@ export function FixedAssetsPage() {
                   {selectedAsset.category}
                 </div>
                 <div>
+                  <span className="text-slate-400">Nature</span>{" "}
+                  {selectedAsset.nature || "—"}
+                </div>
+                <div>
                   <span className="text-slate-400">Famille</span>{" "}
                   {selectedAsset.family || "—"}
                 </div>
@@ -1106,6 +1261,26 @@ export function FixedAssetsPage() {
                 <div>
                   <span className="text-slate-400">Mode acquisition</span>{" "}
                   {selectedAsset.acquisition_mode || "—"}
+                </div>
+                <div>
+                  <span className="text-slate-400">Durée d'amortissement</span>{" "}
+                  {selectedAsset.useful_life_years || "-"} ans
+                </div>
+                <div>
+                  <span className="text-slate-400">Taux d'amortissement</span>{" "}
+                  {selectedAsset.depreciation_rate
+                    ? `${selectedAsset.depreciation_rate}%`
+                    : "—"}
+                </div>
+                <div>
+                  <span className="text-slate-400">
+                    Méthode d'amortissement
+                  </span>{" "}
+                  {selectedAsset.amortization_method === "lineaire"
+                    ? "Linéaire"
+                    : selectedAsset.amortization_method === "degressif"
+                      ? "Dégressif"
+                      : "-"}
                 </div>
                 <div>
                   <span className="text-slate-400">Statut</span>{" "}
@@ -1174,6 +1349,29 @@ export function FixedAssetsPage() {
                         </div>
                         <div>
                           <label className="block text-sm text-slate-400">
+                            Nature
+                          </label>
+                          <select
+                            value={formData.nature || ""}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                nature: e.target.value,
+                              })
+                            }
+                            className="input-md w-full"
+                          >
+                            <option value="">-- Sélectionner --</option>
+                            <option value="building">Bâtiment</option>
+                            <option value="equipment">Équipement</option>
+                            <option value="vehicle">Véhicule</option>
+                            <option value="furniture">Mobilier</option>
+                            <option value="it">Matériel IT</option>
+                            <option value="other">Autre</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm text-slate-400">
                             Famille
                           </label>
                           <input
@@ -1203,6 +1401,64 @@ export function FixedAssetsPage() {
                             }
                             className="input-md w-full"
                           />
+                        </div>
+                        <div>
+                          <label className="block text-sm text-slate-400">
+                            Durée d'amortissement
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            step="1"
+                            value={formData.useful_life_years || 10}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                useful_life_years:
+                                  parseInt(e.target.value) || 10,
+                              })
+                            }
+                            className="input-md w-full"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm text-slate-400">
+                            Taux d'amortissement (%)
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={formData.depreciation_rate ?? ""}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                depreciation_rate:
+                                  e.target.value !== ""
+                                    ? parseFloat(e.target.value)
+                                    : undefined,
+                              })
+                            }
+                            className="input-md w-full"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm text-slate-400">
+                            Méthode d'amortissement
+                          </label>
+                          <select
+                            value={formData.amortization_method || "lineaire"}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                amortization_method: e.target
+                                  .value as AmortizationMethod,
+                              })
+                            }
+                            className="input-md w-full"
+                          >
+                            <option value="lineaire">Linéaire</option>
+                            <option value="degressif">Dégressif</option>
+                          </select>
                         </div>
                       </div>
                       <div className="flex justify-end gap-2">

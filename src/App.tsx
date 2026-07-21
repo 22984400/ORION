@@ -127,7 +127,11 @@ const CACFollowUpPage = lazyWithError(() =>
     default: m.default,
   })),
 );
-
+const ResourcesPage = lazyWithError(() =>
+  import("./pages/resources/ResourcesPage").then((m) => ({
+    default: m.ResourcesPage,
+  })),
+);
 // ========== APPLICATION SHELL ==========
 function AppShell() {
   return (
@@ -170,6 +174,7 @@ function App() {
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/manuel" element={<Manuel />} />
           <Route path="/note-de-frais" element={<NoteDeFrais />} />
+          <Route path="/resources" element={<ResourcesPage />} />
 
           {/* Collaborateurs */}
           <Route path="/collaborateurs" element={<CollaborateurList />} />

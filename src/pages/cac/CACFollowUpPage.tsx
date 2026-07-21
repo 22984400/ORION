@@ -1,3 +1,4 @@
+// src/pages/cac/CACFollowUpPage.tsx
 import React, { useEffect, useState, useCallback } from "react";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../contexts/AuthContext";
@@ -27,7 +28,6 @@ import {
   Cell,
   Legend,
 } from "recharts";
-import { PageHeader } from "../../components/ui/PageHeader";
 
 // ----- Types -----
 type Task = {
@@ -40,7 +40,6 @@ type Task = {
 };
 
 type TeamMember = {
-  initials: string;
   full_name: string;
 };
 
@@ -93,33 +92,66 @@ export default function CACFollowUpPage() {
       return;
     }
 
+    // ✅ Vérification que le pays est disponible
+    if (!selectedCountry?.code) {
+      setLoading(false);
+      setError("Pays non sélectionné.");
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
     try {
-      const { data: taskData } = await supabase
+      // 1. Tâches
+      const { data: taskData, error: taskError } = await supabase
         .from("audit_tasks")
         .select("*")
         .eq("mission_type_id", missionTypeId)
         .eq("is_active", true)
         .order("display_order");
+
+      if (taskError) {
+        console.error("❌ Erreur chargement tâches :", taskError);
+        setError("Erreur chargement tâches : " + taskError.message);
+        setLoading(false);
+        return;
+      }
       setTasks((taskData || []) as Task[]);
 
-      const { data: members } = await supabase
-        .from("team_members")
-        .select("initials, full_name")
-        .eq("is_active", true)
-        .order("initials");
+      // 2. Membres d'équipe
+      const { data: members, error: membersError } = await supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("active", true)
+        .order("full_name");
+
+      if (membersError) {
+        console.error("❌ Erreur chargement membres :", membersError);
+        // non bloquant, on continue
+      }
       setTeamMembers((members || []) as TeamMember[]);
 
-      const { data: clientData } = await supabase
+      // 3. Clients (avec filtre pays en dur : "CMR")
+      const { data: clientData, error: clientError } = await supabase
         .from("clients")
         .select("id, name, client_code")
-        .eq("country", selectedCountry.code)
+        .eq("country", "CMR") // ✅ Correction : "CMR" au lieu de selectedCountry.code
         .order("client_code");
+
+      if (clientError) {
+        console.error("❌ Erreur chargement clients :", clientError);
+        setError("Erreur chargement clients : " + clientError.message);
+        setLoading(false);
+        return;
+      }
+
+      console.log("✅ Clients chargés :", clientData?.length);
       setAllClients((clientData || []) as ClientInfo[]);
 
-      const storageKey = `cac_clients_${selectedCountry.code}_${missionTypeId}`;
+      // 4. Récupération des clients sauvegardés dans localStorage
+      // On utilise "CMR" pour la clé (car pays fixe)
+      const storageKey = `cac_clients_CMR_${missionTypeId}`;
       const savedIds: string[] = JSON.parse(
         localStorage.getItem(storageKey) || "[]",
       );
@@ -134,14 +166,22 @@ export default function CACFollowUpPage() {
       );
       setSelectedClients(activeClients);
 
+      // 5. Assignations (si clients et tâches existent)
       if (clientIds.length > 0 && (taskData || []).length > 0) {
-        const { data: assignData } = await supabase
+        const { data: assignData, error: assignError } = await supabase
           .from("audit_mission_assignments")
           .select(
             "id, task_id, client_id, production_responsible, supervision_responsible, status, progress_percentage",
           )
           .eq("mission_type_id", missionTypeId)
           .in("client_id", clientIds);
+
+        if (assignError) {
+          console.error("❌ Erreur chargement assignations :", assignError);
+          setError("Erreur chargement assignations : " + assignError.message);
+          setLoading(false);
+          return;
+        }
 
         const map: Record<string, CellData> = {};
         for (const a of assignData || []) {
@@ -155,6 +195,7 @@ export default function CACFollowUpPage() {
           };
         }
 
+        // Création des assignations manquantes
         const existingKeys = new Set(Object.keys(map));
         const missing: { client_id: string; task_id: string }[] = [];
         for (const cId of clientIds) {
@@ -179,12 +220,19 @@ export default function CACFollowUpPage() {
             progress_percentage: 0,
             comments: "",
           }));
-          const { data: newAssign } = await supabase
+          const { data: newAssign, error: insertError } = await supabase
             .from("audit_mission_assignments")
             .insert(inserts)
             .select(
               "id, task_id, client_id, production_responsible, supervision_responsible, status, progress_percentage",
             );
+
+          if (insertError) {
+            console.error("❌ Erreur insertion assignations :", insertError);
+            setError("Erreur insertion assignations : " + insertError.message);
+            setLoading(false);
+            return;
+          }
 
           for (const a of newAssign || []) {
             const key = cellKey(a.task_id, a.client_id);
@@ -203,12 +251,12 @@ export default function CACFollowUpPage() {
 
       setDirty(false);
     } catch (err) {
-      console.error("Erreur de chargement:", err);
+      console.error("❌ Erreur générale de chargement:", err);
       setError("Impossible de charger les données. Veuillez rafraîchir.");
     } finally {
       setLoading(false);
     }
-  }, [missionTypeId, selectedCountry.code, user]);
+  }, [missionTypeId, selectedCountry, user]);
 
   useEffect(() => {
     load();
@@ -218,7 +266,8 @@ export default function CACFollowUpPage() {
   function addClient(client: ClientInfo) {
     setSelectedClients((prev) => {
       const next = [...prev, client];
-      const storageKey = `cac_clients_${selectedCountry.code}_${missionTypeId}`;
+      // Utiliser "CMR" fixe pour la clé
+      const storageKey = `cac_clients_CMR_${missionTypeId}`;
       localStorage.setItem(storageKey, JSON.stringify(next.map((c) => c.id)));
       return next;
     });
@@ -230,7 +279,7 @@ export default function CACFollowUpPage() {
   function removeClient(clientId: string) {
     setSelectedClients((prev) => {
       const next = prev.filter((c) => c.id !== clientId);
-      const storageKey = `cac_clients_${selectedCountry.code}_${missionTypeId}`;
+      const storageKey = `cac_clients_CMR_${missionTypeId}`;
       localStorage.setItem(storageKey, JSON.stringify(next.map((c) => c.id)));
       return next;
     });
@@ -260,7 +309,6 @@ export default function CACFollowUpPage() {
         return;
       }
 
-      // Traiter par lots de 10 pour éviter de saturer Supabase
       const batchSize = 10;
       for (let i = 0; i < updates.length; i += batchSize) {
         const batch = updates.slice(i, i + batchSize);
@@ -287,10 +335,8 @@ export default function CACFollowUpPage() {
       }
 
       setDirty(false);
-      // Petite notification de succès (optionnelle)
-      // addNotification({ title: "Sauvegarde réussie", message: "Les modifications ont été enregistrées.", type: "alert" });
     } catch (err) {
-      console.error("Erreur lors de la sauvegarde :", err);
+      console.error("❌ Erreur lors de la sauvegarde :", err);
       setError("Erreur lors de la sauvegarde. Veuillez réessayer.");
     } finally {
       setSaving(false);
@@ -394,7 +440,8 @@ export default function CACFollowUpPage() {
             Suivi des missions CAC
           </h1>
           <p className="text-slate-300 text-sm mt-0.5">
-            {selectedCountry.flag} {selectedCountry.name} · TABLEAU DE SUIVI
+            {selectedCountry?.flag || "🏳️"} {selectedCountry?.name || "Pays"} ·
+            TABLEAU DE SUIVI
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -515,9 +562,7 @@ export default function CACFollowUpPage() {
                     width={120}
                     tick={{ fontSize: 10 }}
                   />
-                  <Tooltip
-                    formatter={(v: number) => [`${v}%`, "Progression"]}
-                  />
+                  <Tooltip formatter={(value) => `${value}%`} />
                   <Bar
                     dataKey="progress"
                     fill="#1e3a5f"
@@ -557,7 +602,7 @@ export default function CACFollowUpPage() {
                     iconType="circle"
                     iconSize={8}
                   />
-                  <Tooltip />
+                  <Tooltip formatter={(value) => `${value}`} />
                 </PieChart>
               </ResponsiveContainer>
             ) : (
@@ -569,7 +614,17 @@ export default function CACFollowUpPage() {
         </div>
       )}
 
-      {/* Tableau principal avec comboboxes */}
+      {/* Datalist pour les responsables (placé hors tableau) */}
+      <datalist id="teamMembersList">
+        <option value="">--</option>
+        {teamMembers.map((m) => (
+          <option key={m.full_name} value={m.full_name}>
+            {m.full_name}
+          </option>
+        ))}
+      </datalist>
+
+      {/* Tableau principal */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-x-auto">
         <table className="w-full text-xs border-collapse min-w-[800px]">
           <thead>
@@ -616,16 +671,6 @@ export default function CACFollowUpPage() {
               ))}
             </tr>
           </thead>
-
-          {/* Datalist pour les responsables */}
-          <datalist id="teamMembersList">
-            <option value="">--</option>
-            {teamMembers.map((m) => (
-              <option key={m.initials} value={m.initials}>
-                {m.full_name}
-              </option>
-            ))}
-          </datalist>
 
           <tbody>
             {categories.map((cat) => {
@@ -693,7 +738,7 @@ export default function CACFollowUpPage() {
                           return (
                             <td key={c.id} className="px-1 py-1">
                               <div className="flex gap-0.5">
-                                {/* Production - combobox */}
+                                {/* Production */}
                                 <div className="flex-1">
                                   <input
                                     type="text"
@@ -710,7 +755,7 @@ export default function CACFollowUpPage() {
                                     placeholder="--"
                                   />
                                 </div>
-                                {/* Supervision - combobox */}
+                                {/* Supervision */}
                                 <div className="flex-1">
                                   <input
                                     type="text"
@@ -793,7 +838,13 @@ export default function CACFollowUpPage() {
                 <td key={c.id} className="px-2 py-3 text-center">
                   <div className="flex flex-col items-center gap-1">
                     <span
-                      className={`text-sm font-bold ${c.pct === 100 ? "text-green-700" : c.pct >= 50 ? "text-blue-700" : "text-amber-700"}`}
+                      className={`text-sm font-bold ${
+                        c.pct === 100
+                          ? "text-green-700"
+                          : c.pct >= 50
+                            ? "text-blue-700"
+                            : "text-amber-700"
+                      }`}
                     >
                       {c.pct}%
                     </span>

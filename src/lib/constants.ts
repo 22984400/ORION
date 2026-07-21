@@ -102,7 +102,8 @@ export const NAV_ITEMS = [
       { id: 'engagements', label: 'Missions', icon: 'Target', path: '/engagements' },
       { id: 'review-notes', label: 'Notes de revue', icon: 'ClipboardCheck', path: '/review-notes' },
       { id: 'findings', label: 'Constats', icon: 'Search', path: '/findings' },
-      { id: 'working-papers', label: 'Documents de travail', icon: 'FileText', path: '/working-papers' },
+      { id: 'working-papers', label: 'Besoins cabinet', icon: 'FileText', path: '/working-papers' },
+  
     ],
   },
   {
@@ -115,6 +116,7 @@ export const NAV_ITEMS = [
       { id: 'leave', label: 'Congés', icon: 'CalendarDays', path: '/leave' },
       { id: 'manuel', label: 'Manuel', icon: 'BookOpen', path: '/manuel' },
       { id: 'note-de-frais', label: 'Notes de frais', icon: 'Receipt', path: '/note-de-frais' },
+      { id: 'resources', label: 'Ressources internes', icon: 'FolderOpen', path: '/resources' },
     ],
   },
   {
@@ -222,4 +224,27 @@ export const STOCK_CATEGORY_LABELS: Record<string, string> = {
   materials: 'Matériaux',
   services: 'Services',
   other: 'Autres',
+};
+// src/lib/constants.ts
+
+export const ETABLISSEMENT_TYPES: { value: EtablissementType; label: string; icon: string }[] = [
+  { value: 'siege', label: 'Siège social', icon: '🏢' },
+  { value: 'agence', label: 'Agence', icon: '🏛️' },
+  { value: 'succursale', label: 'Succursale', icon: '🏪' },
+  { value: 'usine', label: 'Usine', icon: '🏭' },
+  { value: 'magasin', label: 'Magasin', icon: '🛒' },
+  { value: 'bureau', label: 'Bureau', icon: '📋' },
+  { value: 'entrepot', label: 'Entrepôt', icon: '📦' },
+  { value: 'autre', label: 'Autre', icon: '📍' },
+];
+
+export const ETABLISSEMENT_TYPE_LABELS: Record<EtablissementType, string> = {
+  siege: 'Siège social',
+  agence: 'Agence',
+  succursale: 'Succursale',
+  usine: 'Usine',
+  magasin: 'Magasin',
+  bureau: 'Bureau',
+  entrepot: 'Entrepôt',
+  autre: 'Autre',
 };

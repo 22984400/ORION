@@ -4,7 +4,6 @@ import styled from "styled-components";
 import { supabase } from "../../lib/supabase";
 import { addNotification } from "../../lib/notifications";
 import { format } from "date-fns";
-import { fr } from "date-fns/locale";
 
 interface ExpenseReport {
   id: string;
@@ -23,6 +22,7 @@ interface ExpenseReport {
 
 interface Props {
   onEdit: (id: string) => void;
+  onRefresh: () => void;
 }
 
 const TableWrapper = styled.div`
@@ -102,7 +102,7 @@ const LoadingContainer = styled.div`
   color: #94a3b8;
 `;
 
-export const NoteDeFraisList: React.FC<Props> = ({ onEdit }) => {
+export const NoteDeFraisList: React.FC<Props> = ({ onEdit, onRefresh }) => {
   const [reports, setReports] = useState<ExpenseReport[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -110,8 +110,6 @@ export const NoteDeFraisList: React.FC<Props> = ({ onEdit }) => {
   const loadReports = async () => {
     try {
       setLoading(true);
-      // Récupérer les notes de frais de l'utilisateur connecté (à adapter)
-      // Ici on prend toutes pour l'exemple
       const { data, error } = await supabase
         .from("expense_reports")
         .select("*")
@@ -138,6 +136,7 @@ export const NoteDeFraisList: React.FC<Props> = ({ onEdit }) => {
         .eq("id", id);
       if (error) throw error;
       await loadReports();
+      onRefresh();
       void addNotification({
         title: "Note de frais soumise",
         message: "Une note de frais a été soumise pour validation.",
@@ -157,6 +156,7 @@ export const NoteDeFraisList: React.FC<Props> = ({ onEdit }) => {
         .eq("id", id);
       if (error) throw error;
       await loadReports();
+      onRefresh();
       void addNotification({
         title: "Note de frais supprimée",
         message: "Une note de frais a été supprimée.",
@@ -212,7 +212,10 @@ export const NoteDeFraisList: React.FC<Props> = ({ onEdit }) => {
               <td>{report.collaborateur_name}</td>
               <td>
                 {report.date_debut && report.date_fin
-                  ? `${format(new Date(report.date_debut), "dd/MM/yyyy")} - ${format(new Date(report.date_fin), "dd/MM/yyyy")}`
+                  ? `${format(new Date(report.date_debut), "dd/MM/yyyy")} - ${format(
+                      new Date(report.date_fin),
+                      "dd/MM/yyyy",
+                    )}`
                   : "Non défini"}
               </td>
               <td>{report.total_ht.toFixed(0)} FCFA</td>

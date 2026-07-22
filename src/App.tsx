@@ -132,6 +132,20 @@ const ResourcesPage = lazyWithError(() =>
     default: m.ResourcesPage,
   })),
 );
+
+const FournisseursPage = lazyWithError(() =>
+  import("./pages/fournisseur/FournisseursPage").then((m) => ({
+    default: m.FournisseursPage,
+  })),
+);
+
+const ProfilePage = lazyWithError(() =>
+  import("./pages/profile/ProfilePage").then((m) => ({
+    default: m.ProfilePage,
+  })),
+);
+
+import { CaissePage } from "./pages/caisse/CaissePage";
 // ========== APPLICATION SHELL ==========
 function AppShell() {
   return (
@@ -175,18 +189,18 @@ function App() {
           <Route path="/manuel" element={<Manuel />} />
           <Route path="/note-de-frais" element={<NoteDeFrais />} />
           <Route path="/resources" element={<ResourcesPage />} />
-
+          <Route path="/caisse" element={<CaissePage />} />
           {/* Collaborateurs */}
           <Route path="/collaborateurs" element={<CollaborateurList />} />
           <Route path="/collaborateurs/new" element={<CollaborateurFiche />} />
           <Route path="/collaborateurs/:id" element={<CollaborateurFiche />} />
-
+          <Route path="/fournisseurs" element={<FournisseursPage />} />
           {/* Factures */}
           <Route path="/factures" element={<InvoicesPage />} />
           <Route path="/factures/new" element={<InvoiceFormPage />} />
           <Route path="/factures/:id" element={<InvoiceDetailPage />} />
           <Route path="/factures/:id/edit" element={<InvoiceFormPage />} />
-
+          <Route path="/profile" element={<ProfilePage />} />
           {/* Suivi CAC */}
           <Route path="/cac-suivi" element={<CACFollowUpPage />} />
         </Route>

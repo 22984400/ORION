@@ -111,11 +111,12 @@ export const NAV_ITEMS = [
     items: [
       { id: 'stock', label: 'Stock', icon: 'Package', path: '/stock' },
       { id: 'fixed-assets', label: 'Immobilisations', icon: 'Landmark', path: '/fixed-assets' },
-      // 👇 NOUVEAU LIEN
+      { id: 'caisse', label: 'Caisse', icon: 'Wallet', path: '/caisse' },
       { id: 'cac-suivi', label: 'Suivi CAC', icon: 'ClipboardList', path: '/cac-suivi' },
       { id: 'leave', label: 'Congés', icon: 'CalendarDays', path: '/leave' },
       { id: 'manuel', label: 'Manuel', icon: 'BookOpen', path: '/manuel' },
       { id: 'note-de-frais', label: 'Notes de frais', icon: 'Receipt', path: '/note-de-frais' },
+      { id: 'fournisseurs', label: 'Fournisseurs', icon: 'Truck', path: '/fournisseurs' },
       { id: 'resources', label: 'Ressources internes', icon: 'FolderOpen', path: '/resources' },
     ],
   },

@@ -16,9 +16,11 @@ import {
   Bell,
   ChevronLeft,
   ChevronRight,
+  Wallet,
   Hexagon,
   BookOpen,
   Receipt,
+  Truck,
   ClipboardList,
   FolderOpen, // ✅ ajout pour Ressources internes
 } from "lucide-react";
@@ -39,6 +41,8 @@ const iconMap: Record<string, React.FC<{ className?: string }>> = {
   Users,
   BarChart3,
   Bell,
+  Truck,
+  Wallet,
   BookOpen,
   Receipt,
   ClipboardList,

@@ -1,5 +1,4 @@
 // src/pages/clients/ClientsPage.tsx
-
 import { useEffect, useState } from "react";
 import { Plus, Search, Edit2, Trash2, X, Check } from "lucide-react";
 import { supabase } from "../../lib/supabase";
@@ -571,11 +570,11 @@ export default function ClientsPage() {
           />
         </div>
         <div className="flex flex-wrap gap-2">
+          {/* ✅ Filtre pays : texte blanc sur fond sombre */}
           <select
             value={filterCountry}
             onChange={(e) => setFilterCountry(e.target.value)}
             className="auth-input py-2.5 px-3 text-white bg-slate-800 border-slate-600 focus:border-primary-500 rounded-lg"
-            style={{ color: "black" }}
           >
             <option value="all">🌍 Tous les pays</option>
             {COUNTRIES.map((c) => (
@@ -584,11 +583,11 @@ export default function ClientsPage() {
               </option>
             ))}
           </select>
+          {/* ✅ Filtre nature : texte blanc sur fond sombre */}
           <select
             value={filterNature}
             onChange={(e) => setFilterNature(e.target.value)}
             className="auth-input py-2.5 px-3 text-white bg-slate-800 border-slate-600 focus:border-primary-500 rounded-lg"
-            style={{ color: "black" }}
           >
             <option value="all">📋 Toutes les natures</option>
             {NATURE_OPTIONS.map((n) => (

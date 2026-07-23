@@ -1,9 +1,10 @@
+// src/components/InvoicePDF.tsx
 import { Page, Document, StyleSheet, View, Text } from "@react-pdf/renderer";
 import { formatNumber } from "../lib/invoiceUtils";
 import { BANK_DETAILS, COMPANY_INFO } from "../lib/constants";
 
 const styles = StyleSheet.create({
-  page: { padding: 30, fontFamily: "Helvetica", fontSize: 10 }, // base font increased
+  page: { padding: 30, fontFamily: "Helvetica", fontSize: 10 },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -51,7 +52,6 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   tableCell: { fontSize: 9, paddingHorizontal: 4, textAlign: "left" },
-  // Column widths (adjusted for larger text)
   mission: { width: "15%" },
   prestation: { width: "15%" },
   honorairesDesc: { width: "15%" },
@@ -134,7 +134,19 @@ export const InvoicePDF = ({ invoiceData }: { invoiceData: any }) => {
   const total_ht = honoraires_total;
   const tva_amount = honoraires_total * 0.1925;
   const total_ttc = total_ht + tva_amount;
-  const montant_ttc_final = total_ttc + retenus_total + debours_total;
+
+  const docType = invoiceData.type_document || "FACTURE";
+  const isCredit = docType === "AVOIR";
+  const final_ttc = isCredit
+    ? -(total_ttc + retenus_total + debours_total)
+    : total_ttc + retenus_total + debours_total;
+
+  const titleMap: Record<string, string> = {
+    FACTURE: "FACTURE",
+    "PRO-FORMA": "PRO-FORMA",
+    AVOIR: "AVOIR",
+  };
+  const title = titleMap[docType] || "FACTURE";
 
   return (
     <Document>
@@ -157,10 +169,13 @@ export const InvoicePDF = ({ invoiceData }: { invoiceData: any }) => {
             )}
           </View>
           <View style={styles.invoiceSection}>
-            <Text style={styles.invoiceNumber}>FACTURE</Text>
+            <Text style={styles.invoiceNumber}>{title}</Text>
             <Text style={styles.companyDetails}>
               N° {invoiceData.invoice_number}
             </Text>
+            {isCredit && (
+              <Text style={{ fontSize: 9, color: "#cc0000" }}>(Avoir)</Text>
+            )}
             <Text style={styles.companyDetails}>
               Date:{" "}
               {new Date(invoiceData.date_emission).toLocaleDateString("fr-FR")}
@@ -168,7 +183,7 @@ export const InvoicePDF = ({ invoiceData }: { invoiceData: any }) => {
           </View>
         </View>
 
-        {/* Client + Bank Details side by side with sky blue background */}
+        {/* Client + Bank Details */}
         <View style={styles.clientBankRow}>
           <View style={styles.clientBox}>
             <Text style={styles.label}>Client</Text>
@@ -376,16 +391,26 @@ export const InvoicePDF = ({ invoiceData }: { invoiceData: any }) => {
               {formatNumber(debours_total)} {invoiceData.currency}
             </Text>
           </View>
-          <View style={styles.blueBox}>
+          <View
+            style={[styles.blueBox, isCredit && { backgroundColor: "#fee2e2" }]}
+          >
             <Text
-              style={{ fontSize: 11, fontWeight: "bold", color: "#1e3a5f" }}
+              style={{
+                fontSize: 11,
+                fontWeight: "bold",
+                color: isCredit ? "#cc0000" : "#1e3a5f",
+              }}
             >
-              Montant TTC :{" "}
+              Montant {isCredit ? " (Avoir)" : ""} TTC :{" "}
             </Text>
             <Text
-              style={{ fontSize: 11, fontWeight: "bold", color: "#1e3a5f" }}
+              style={{
+                fontSize: 11,
+                fontWeight: "bold",
+                color: isCredit ? "#cc0000" : "#1e3a5f",
+              }}
             >
-              {formatNumber(montant_ttc_final)} {invoiceData.currency}
+              {formatNumber(final_ttc)} {invoiceData.currency}
             </Text>
           </View>
           {invoiceData.payment_method && (

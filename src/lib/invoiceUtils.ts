@@ -11,7 +11,7 @@ export type InvoiceLine = {
   taux: number | null;
   montant: number;
   sort_order: number;
-  comments?: string;            // <-- added comment field
+  comments?: string;
 };
 
 export type InvoiceTotals = {
@@ -71,7 +71,6 @@ export async function getNextInvoiceSequence(initials: string, month: number): P
 
 export async function getNextRefPFSequence(refPFBase: string): Promise<number> {
   try {
-    // Get all ref_pf values that start with the base
     const { data, error } = await supabase
       .from('invoices')
       .select('ref_pf')
@@ -86,7 +85,6 @@ export async function getNextRefPFSequence(refPFBase: string): Promise<number> {
       return 1;
     }
 
-    // Extract sequence numbers and find the highest
     const sequences = data
       .map(invoice => {
         const match = invoice.ref_pf.match(new RegExp(`^${refPFBase}-(\\d+)$`));
@@ -102,7 +100,8 @@ export async function getNextRefPFSequence(refPFBase: string): Promise<number> {
   }
 }
 
-export function computeTotals(lines: InvoiceLine[], acompteRegle: number): InvoiceTotals {
+// ✅ computeTotals avec paramètre typeDocument
+export function computeTotals(lines: InvoiceLine[], acompteRegle: number, typeDocument: string): InvoiceTotals {
   const honoraireLines = lines.filter(l => l.section === 'HONORAIRES');
   const retenuLines = lines.filter(l => l.section === 'RETENUS');
   const debourLines = lines.filter(l => l.section === 'DEBOURS');
@@ -114,10 +113,15 @@ export function computeTotals(lines: InvoiceLine[], acompteRegle: number): Invoi
   const totalRetenues = retenuLines.reduce((s, l) => s + (l.montant || 0), 0);
   const totalDebours = debourLines.reduce((s, l) => s + (l.montant || 0), 0);
 
-  const totalGeneral = totalTTC + totalRetenues + totalDebours - acompteRegle;
+  let totalGeneral = totalTTC + totalRetenues + totalDebours - acompteRegle;
+  // Si Avoir => total négatif
+  if (typeDocument === 'AVOIR') {
+    totalGeneral = -totalGeneral;
+  }
 
   return { totalHT, tva, totalTTC, totalRetenues, totalDebours, totalGeneral };
 }
+
 
 export function computeLineMontant(line: InvoiceLine, totalHT: number): number {
   if (line.section === 'HONORAIRES') {

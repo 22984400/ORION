@@ -1,3 +1,4 @@
+// src/components/InvoiceTemplate.tsx
 import React, { useState } from "react";
 import { BANK_DETAILS, COMPANY_INFO } from "../lib/constants";
 import { formatNumber } from "../lib/invoiceUtils";
@@ -17,6 +18,7 @@ interface InvoiceTemplateProps {
     id: string;
     invoice_number: string;
     date_emission: string;
+    type_document: string; // "FACTURE" | "PRO-FORMA" | "AVOIR"
     client_details_snapshot?: {
       name: string;
       address_bp: string;
@@ -57,7 +59,13 @@ export const InvoiceTemplate: React.FC<InvoiceTemplateProps> = ({
   const total_ht = honoraires_total;
   const tva_amount = honoraires_total * 0.1925;
   const total_ttc = total_ht + tva_amount;
-  const montant_ttc_final = total_ttc + retenus_total + debours_total;
+
+  // Utilisation de type_document
+  const docType = invoice.type_document || "FACTURE";
+  const isCredit = docType === "AVOIR";
+  const final_ttc = isCredit
+    ? -(total_ttc + retenus_total + debours_total)
+    : total_ttc + retenus_total + debours_total;
 
   const printStyles = `
     @media print {
@@ -140,6 +148,14 @@ export const InvoiceTemplate: React.FC<InvoiceTemplateProps> = ({
     return [parts[0] || "", parts[1] || "", parts[2] || ""];
   };
 
+  const titleMap: Record<string, string> = {
+    FACTURE: "FACTURE",
+    "PRO-FORMA": "PRO-FORMA",
+    AVOIR: "AVOIR",
+  };
+  const title = titleMap[docType] || "FACTURE";
+  const totalColor = final_ttc < 0 ? "text-red-600" : "text-blue-900";
+
   return (
     <div className="bg-white rounded-2xl shadow-lg p-6 border border-slate-200 print:shadow-none print:border-none print:rounded-none invoice-container">
       <style>{printStyles}</style>
@@ -147,7 +163,12 @@ export const InvoiceTemplate: React.FC<InvoiceTemplateProps> = ({
       {/* Header */}
       <div className="flex items-start justify-between mb-4 pb-3 border-b border-slate-300">
         <div>
-          <h1 className="text-3xl font-bold text-black">FACTURE</h1>
+          <h1 className="text-3xl font-bold text-black">{title}</h1>
+          {isCredit && (
+            <p className="text-xs text-red-500 mt-1">
+              (Avoir – montant négatif)
+            </p>
+          )}
         </div>
         <div className="flex-shrink-0">
           {!logoError ? (
@@ -187,7 +208,7 @@ export const InvoiceTemplate: React.FC<InvoiceTemplateProps> = ({
         <div className="text-right">
           <div className="mb-3">
             <p className="text-xs font-medium text-black mb-1 uppercase">
-              N° Facture
+              N° {title}
             </p>
             <p className="text-xl font-bold text-blue-700">
               {invoice.invoice_number}
@@ -204,9 +225,8 @@ export const InvoiceTemplate: React.FC<InvoiceTemplateProps> = ({
         </div>
       </div>
 
-      {/* Client Info + Bank Details side by side with vertical divider */}
+      {/* Client Info + Bank Details */}
       <div className="grid grid-cols-2 gap-6 mb-4 pb-3 border-b border-slate-300">
-        {/* Client Info */}
         <div>
           <p className="text-xs font-semibold text-black mb-1 uppercase">
             Client
@@ -239,10 +259,8 @@ export const InvoiceTemplate: React.FC<InvoiceTemplateProps> = ({
           )}
         </div>
 
-        {/* Vertical divider line */}
         <div className="relative">
           <div className="absolute left-0 top-0 bottom-0 w-px bg-slate-300 -ml-3"></div>
-          {/* Bank Details with light sky blue background */}
           <div className="bg-sky-50 p-3 rounded-lg border border-sky-200">
             <p className="text-xs font-semibold text-black mb-1 uppercase">
               Coordonnées Bancaires
@@ -476,7 +494,7 @@ export const InvoiceTemplate: React.FC<InvoiceTemplateProps> = ({
         </div>
       )}
 
-      {/* Final totals section */}
+      {/* Final totals */}
       <div className="mb-4 pb-3 border-b border-slate-300">
         <div className="flex justify-end">
           <div className="w-72 space-y-1">
@@ -486,10 +504,14 @@ export const InvoiceTemplate: React.FC<InvoiceTemplateProps> = ({
                 {formatNumber(debours_total)} {invoice.currency}
               </span>
             </div>
-            <div className="flex justify-between items-center py-2 text-base font-bold bg-blue-100 px-3 rounded border border-blue-300">
-              <span className="text-blue-800">Montant TTC :</span>
-              <span className="text-blue-900">
-                {formatNumber(montant_ttc_final)} {invoice.currency}
+            <div
+              className={`flex justify-between items-center py-2 text-base font-bold bg-blue-100 px-3 rounded border border-blue-300 ${isCredit ? "border-red-300 bg-red-50" : ""}`}
+            >
+              <span className={isCredit ? "text-red-700" : "text-blue-800"}>
+                Montant {isCredit ? " (Avoir)" : ""} TTC :
+              </span>
+              <span className={totalColor}>
+                {formatNumber(final_ttc)} {invoice.currency}
               </span>
             </div>
             {invoice.payment_method && (
@@ -506,7 +528,7 @@ export const InvoiceTemplate: React.FC<InvoiceTemplateProps> = ({
         </div>
       </div>
 
-      {/* Signatures and Footer */}
+      {/* Signatures */}
       <div className="mt-4 flex justify-between text-left text-sm">
         <div>
           <label className="block font-semibold text-black">

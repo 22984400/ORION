@@ -1,3 +1,4 @@
+// src/pages/InvoiceFormPage.tsx
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Plus, X, Save, Trash2 } from "lucide-react";
@@ -38,9 +39,10 @@ export default function InvoiceFormPage() {
   );
   const [refPf, setRefPf] = useState("");
   const [dateContrat, setDateContrat] = useState("");
-  const [invoiceType, setInvoiceType] = useState<"PRO-FORMA" | "FACTURE">(
-    "FACTURE",
-  );
+  // 👇 UN SEUL SELECT avec 3 options
+  const [typeDocument, setTypeDocument] = useState<
+    "FACTURE" | "PRO-FORMA" | "AVOIR"
+  >("FACTURE");
   const [lines, setLines] = useState<InvoiceLine[]>([]);
   const [acompteRegle, setAcompteRegle] = useState(0);
   const [paymentMethods, setPaymentMethods] = useState<string[]>(["virement"]);
@@ -52,7 +54,8 @@ export default function InvoiceFormPage() {
   const [initializing, setInitializing] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const totals = computeTotals(lines, acompteRegle);
+  // ✅ Passage de typeDocument à computeTotals
+  const totals = computeTotals(lines, acompteRegle, typeDocument);
   const { firstName, lastName } = getInvoiceUserNames(profile, user);
 
   const generateReference = async () => {
@@ -66,7 +69,6 @@ export default function InvoiceFormPage() {
     let cancelled = false;
 
     const load = async () => {
-      // ⚠️ Attendre que l'utilisateur soit authentifié
       if (!user) {
         setInitializing(false);
         return;
@@ -111,7 +113,7 @@ export default function InvoiceFormPage() {
             setInvoiceDate(inv.date_emission);
             setRefPf(inv.ref_pf || "");
             setDateContrat(inv.date_contrat || "");
-            setInvoiceType(inv.invoice_type || "FACTURE");
+            setTypeDocument(inv.type_document || "FACTURE");
             setAcompteRegle(inv.acompte_regle || 0);
             setPaymentMethods([inv.payment_method]);
             setSignatureCompany(inv.signature_company || "");
@@ -150,7 +152,7 @@ export default function InvoiceFormPage() {
     return () => {
       cancelled = true;
     };
-  }, [invoiceId, user]); // ✅ Ajout de "user" comme dépendance
+  }, [invoiceId, user]);
 
   useEffect(() => {
     if (!invoiceId && firstName && invoiceDate) {
@@ -232,7 +234,7 @@ export default function InvoiceFormPage() {
         country: selectedCountry.code,
         ref_pf: refPf,
         date_contrat: dateContrat || null,
-        invoice_type: invoiceType,
+        type_document: typeDocument, // 👈 UN SEUL CHAMP
         total_ht: totals.totalHT,
         total_tva: totals.tva,
         total_ttc: totals.totalTTC,
@@ -288,7 +290,7 @@ export default function InvoiceFormPage() {
           }
           void addNotification({
             title: "Nouvelle facture créée",
-            message: `La facture ${inv.invoice_number || inv.ref_pf || "a été créée"} a été enregistrée.`,
+            message: `La ${typeDocument === "AVOIR" ? "avoir" : typeDocument === "PRO-FORMA" ? "pro‑forma" : "facture"} ${inv.invoice_number || inv.ref_pf || "a été créée"} a été enregistrée.`,
             type: "invoice",
           });
         }
@@ -327,12 +329,19 @@ export default function InvoiceFormPage() {
       .join("||");
   };
 
+  const typeLabels = {
+    FACTURE: "Facture",
+    "PRO-FORMA": "Pro‑forma",
+    AVOIR: "Avoir",
+  };
+
   return (
     <div className="page-container max-w-6xl">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-semibold text-white">
-            {invoiceId ? "Modifier" : "Nouvelle"} facture
+            {invoiceId ? "Modifier" : "Nouvelle"}{" "}
+            {typeLabels[typeDocument].toLowerCase()}
           </h1>
           {refPf && (
             <p className="text-sm text-slate-300 mt-1 font-mono">{refPf}</p>
@@ -417,19 +426,23 @@ export default function InvoiceFormPage() {
               className="input-md w-full bg-white text-black"
             />
           </div>
+          {/* 👇 UN SEUL SELECT */}
           <div>
             <label className="block text-xs font-medium text-white mb-1">
-              Type de facture
+              Type de document
             </label>
             <select
-              value={invoiceType}
+              value={typeDocument}
               onChange={(e) =>
-                setInvoiceType(e.target.value as "PRO-FORMA" | "FACTURE")
+                setTypeDocument(
+                  e.target.value as "FACTURE" | "PRO-FORMA" | "AVOIR",
+                )
               }
               className="input-md w-full bg-white text-black"
             >
               <option value="FACTURE">Facture</option>
               <option value="PRO-FORMA">Pro‑forma</option>
+              <option value="AVOIR">Avoir</option>
             </select>
           </div>
         </div>
@@ -765,10 +778,17 @@ export default function InvoiceFormPage() {
 
           <div className="bg-primary-900/30 p-4 rounded-lg border-2 border-primary-500/50">
             <p className="text-sm text-slate-300 mb-1">Total général à payer</p>
-            <p className="text-3xl font-bold text-primary-300">
+            <p
+              className={`text-3xl font-bold ${totals.totalGeneral < 0 ? "text-red-400" : "text-primary-300"}`}
+            >
               {formatNumber(totals.totalGeneral, 2)}{" "}
               {selectedCountry.currencySymbol}
             </p>
+            {typeDocument === "AVOIR" && (
+              <p className="text-xs text-amber-400 mt-1">
+                (Avoir - montant négatif)
+              </p>
+            )}
           </div>
         </div>
 

@@ -5,7 +5,7 @@ import { addNotification } from "../../lib/notifications";
 import { supabase } from "../../lib/supabase";
 import { InvoiceTemplate } from "../../components/InvoiceTemplate";
 import html2pdf from "html2pdf.js";
-import { useAuth } from "../../contexts/AuthContext"; // ✅ Ajout
+import { useAuth } from "../../contexts/AuthContext";
 
 type Invoice = any;
 type Line = any;
@@ -24,7 +24,7 @@ const statusLabels: Record<string, string> = {
 };
 
 export default function InvoiceDetailPage() {
-  const { user } = useAuth(); // ✅ Ajout
+  const { user } = useAuth();
   const { id } = useParams();
   const [searchParams] = useSearchParams();
   const [invoice, setInvoice] = useState<Invoice | null>(null);
@@ -46,7 +46,6 @@ export default function InvoiceDetailPage() {
     let cancelled = false;
 
     const load = async () => {
-      // ⚠️ Attendre que l'utilisateur soit authentifié
       if (!user) {
         setLoading(false);
         return;
@@ -111,7 +110,7 @@ export default function InvoiceDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [id, user]); // ✅ Ajout de "user" comme dépendance
+  }, [id, user]);
 
   useEffect(() => {
     if (
@@ -189,6 +188,9 @@ export default function InvoiceDetailPage() {
       </div>
     );
   }
+
+  const docKind = invoice.document_kind || "INVOICE";
+  const title = docKind === "CREDIT_NOTE" ? "AVOIR" : "FACTURE";
 
   return (
     <div className="max-w-4xl">

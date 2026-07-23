@@ -1,3 +1,4 @@
+// src/pages/InvoicesPage.tsx
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -25,7 +26,7 @@ type Invoice = {
   total_general: number;
   status: string;
   currency: string;
-  invoice_type: string;
+  type_document: string; // "FACTURE" | "PRO-FORMA" | "AVOIR"
   client_details_snapshot?: { name?: string };
 };
 
@@ -36,11 +37,9 @@ const STAT_CARDS = [
   { key: "cancelled", label: "Annulées" },
 ] as const;
 
-// Badge personnalisé avec contraste renforcé
 function StatusBadge({ status }: { status: string }) {
   const config = INVOICE_STATUS_CONFIG[status] ?? INVOICE_STATUS_CONFIG.draft;
 
-  // On conserve le label et on applique des couleurs plus lisibles
   const bgColorMap: Record<string, string> = {
     draft: "bg-slate-600",
     pending: "bg-amber-600",
@@ -80,7 +79,6 @@ export default function InvoicesPage() {
     "?";
 
   const load = useCallback(async () => {
-    // ⚠️ Attendre que l'utilisateur soit authentifié
     if (!user) {
       setLoading(false);
       return;
@@ -94,7 +92,7 @@ export default function InvoicesPage() {
       const { data, error: fetchError } = await supabase
         .from("invoices")
         .select(
-          "id, invoice_number, ref_pf, date_emission, total_general, status, currency, invoice_type, client_details_snapshot",
+          "id, invoice_number, ref_pf, date_emission, total_general, status, currency, type_document, client_details_snapshot",
         )
         .eq("archived", false)
         .eq("country", selectedCountry.code)
@@ -116,7 +114,7 @@ export default function InvoicesPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedCountry.code, user]); // ✅ Ajout de "user" comme dépendance
+  }, [selectedCountry.code, user]);
 
   useEffect(() => {
     void load();
@@ -171,6 +169,18 @@ export default function InvoicesPage() {
 
   const formatAmount = (amount: number, currency: string) =>
     `${new Intl.NumberFormat("fr-FR").format(amount)} ${currency === "XAF" ? "FCFA" : currency}`;
+
+  const getDocumentLabel = (type: string) => {
+    if (type === "PRO-FORMA") return "Pro‑forma";
+    if (type === "AVOIR") return "Avoir";
+    return "Facture";
+  };
+
+  const getDocumentBadgeClass = (type: string) => {
+    if (type === "AVOIR") return "bg-amber-700 text-amber-100";
+    if (type === "PRO-FORMA") return "bg-blue-700 text-blue-100";
+    return "bg-slate-700 text-white";
+  };
 
   return (
     <div className="page-container space-y-6">
@@ -282,9 +292,8 @@ export default function InvoicesPage() {
                 <tr className="border-b border-slate-700/50 text-slate-300 text-xs uppercase tracking-wide">
                   <th className="text-left px-6 py-3 font-medium">Référence</th>
                   <th className="text-left px-4 py-3 font-medium">Client</th>
-                  <th className="text-left px-4 py-3 font-medium hidden md:table-cell">
-                    Type
-                  </th>
+                  <th className="text-left px-4 py-3 font-medium">Type</th>
+                  <th className="text-left px-4 py-3 font-medium">Document</th>
                   <th className="text-left px-4 py-3 font-medium">Date</th>
                   <th className="text-right px-4 py-3 font-medium">Total</th>
                   <th className="text-left px-4 py-3 font-medium">Statut</th>
@@ -314,11 +323,11 @@ export default function InvoicesPage() {
                       <td className="px-4 py-4 text-white">
                         {inv.client_details_snapshot?.name || "—"}
                       </td>
-                      <td className="px-4 py-4 hidden md:table-cell">
-                        <span className="text-xs px-2 py-1 rounded-md bg-slate-700 text-white">
-                          {inv.invoice_type === "PRO-FORMA"
-                            ? "Pro‑forma"
-                            : "Facture"}
+                      <td className="px-4 py-4">
+                        <span
+                          className={`text-xs px-2 py-1 rounded-md ${inv.type_document === "AVOIR" ? "bg-amber-700 text-amber-100" : inv.type_document === "PRO-FORMA" ? "bg-blue-700 text-blue-100" : "bg-slate-700 text-white"}`}
+                        >
+                          {getDocumentLabel(inv.type_document)}
                         </span>
                       </td>
                       <td className="px-4 py-4 text-slate-300">

@@ -72,14 +72,12 @@ type Client = {
   versement_1_pourcent_cdd?: boolean;
   soumis_cotisations_tns?: boolean;
   status?: string;
-  // colonnes de référence (IDs)
   forme_juridique_id?: number | null;
   statut_fiscal_id?: number | null;
   regime_fiscal_id?: number | null;
   nature_id?: number | null;
 };
 
-// Types pour les données de référence
 type RefForme = { id: number; label: string };
 type RefStatutFiscal = { id: number; label: string };
 type RefRegimeFiscal = { id: number; label: string };
@@ -128,18 +126,15 @@ export default function ClientsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Filtres
   const [filterCountry, setFilterCountry] = useState<string>("all");
   const [filterNature, setFilterNature] = useState<string>("all");
 
-  // État du modal
   const [modal, setModal] = useState<ModalState>({ open: false, client: null });
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<
     "general" | "juridiques" | "fiscales" | "sociales" | "etablissements"
   >("general");
 
-  // États pour les données de référence et les liaisons client
   const [refs, setRefs] = useState<{
     formes: RefForme[];
     statuts: RefStatutFiscal[];
@@ -161,7 +156,6 @@ export default function ClientsPage() {
   const [clientDocuments, setClientDocuments] = useState<ClientDocument[]>([]);
   const [clientTaxes, setClientTaxes] = useState<ClientTaxe[]>([]);
 
-  // ===== Chargement des références =====
   const loadReferences = async () => {
     try {
       const [
@@ -199,7 +193,6 @@ export default function ClientsPage() {
     }
   };
 
-  // ===== Chargement des clients =====
   const loadClients = async () => {
     if (!user) return;
     setLoading(true);
@@ -218,7 +211,6 @@ export default function ClientsPage() {
     }
   };
 
-  // ===== Chargement des liaisons pour un client donné (documents et taxes) =====
   const loadClientLinks = async (clientId?: string) => {
     if (!clientId) {
       setClientDocuments([]);
@@ -237,24 +229,20 @@ export default function ClientsPage() {
     }
   };
 
-  // ===== Chargement initial =====
   useEffect(() => {
     loadReferences();
     loadClients();
   }, [user]);
 
-  // Lorsqu'on ouvre le modal avec un client existant, charger ses liens
   useEffect(() => {
     if (modal.open && modal.client?.id) {
       loadClientLinks(modal.client.id);
     } else {
-      // Nouveau client : réinitialiser les liens
       setClientDocuments([]);
       setClientTaxes([]);
     }
   }, [modal.open, modal.client?.id]);
 
-  // ===== Génération du code client =====
   const generateClientCode = async (countryCode: string) => {
     const { data, error } = await supabase
       .from("clients")
@@ -277,7 +265,6 @@ export default function ClientsPage() {
     return `${countryCode}${String(nextNum).padStart(5, "0")}`;
   };
 
-  // ===== Ouverture du modal =====
   const openAdd = async () => {
     try {
       const defaultCountry = selectedCountry?.code || "CMR";
@@ -335,7 +322,6 @@ export default function ClientsPage() {
     setActiveTab("general");
   };
 
-  // ===== Suppression =====
   const handleDelete = async (clientId: string, clientName: string) => {
     if (!confirm(`Supprimer définitivement "${clientName}" ?`)) return;
     setLoading(true);
@@ -358,12 +344,10 @@ export default function ClientsPage() {
     }
   };
 
-  // ===== Gestion des champs du client =====
   const updateField = (field: keyof Client, value: any) => {
     setModal((m) => ({ ...m, client: { ...m.client, [field]: value } }));
   };
 
-  // ===== Gestion du changement de pays (regénère le code) =====
   const handleCountryChange = async (countryCode: string) => {
     const newCode = await generateClientCode(countryCode);
     const currentYear = new Date().getFullYear();
@@ -372,20 +356,16 @@ export default function ClientsPage() {
     updateField("contract_ref", `CONTRAT/${currentYear}/${newCode}`);
   };
 
-  // ===== Gestion des documents (checklist) =====
   const handleDocumentStatusChange = (
     documentId: number,
     status: "a_fournir" | "fourni" | "non_applicable",
   ) => {
-    // Mettre à jour l'état local
     const existing = clientDocuments.find((d) => d.document_id === documentId);
     if (existing) {
       setClientDocuments((prev) =>
         prev.map((d) => (d.document_id === documentId ? { ...d, status } : d)),
       );
     } else {
-      // Nouveau document, pas encore en base (sera créé à la sauvegarde)
-      // On ajoute un objet temporaire sans id
       setClientDocuments((prev) => [
         ...prev,
         {
@@ -398,7 +378,6 @@ export default function ClientsPage() {
     }
   };
 
-  // ===== Gestion des taxes (assujetti) =====
   const handleTaxeChange = (taxeId: number, assujetti: boolean) => {
     const existing = clientTaxes.find((t) => t.taxe_id === taxeId);
     if (existing) {
@@ -418,7 +397,6 @@ export default function ClientsPage() {
     }
   };
 
-  // ===== Sauvegarde du client et de ses liaisons =====
   const handleSave = async () => {
     if (!modal.client?.name?.trim()) {
       setError("Le nom est requis");
@@ -427,7 +405,6 @@ export default function ClientsPage() {
     setSaving(true);
     setError("");
 
-    // Construction du payload client
     const payload: any = {
       client_code: modal.client.client_code || "",
       name: modal.client.name || "",
@@ -478,7 +455,6 @@ export default function ClientsPage() {
     let clientName = modal.client.name || "";
 
     try {
-      // 1. Sauvegarder le client
       if (clientId) {
         const { error: updateError } = await supabase
           .from("clients")
@@ -496,18 +472,12 @@ export default function ClientsPage() {
         clientName = inserted.name || clientName;
       }
 
-      // 2. Sauvegarder les documents (client_documents)
-      // On supprime d'abord les existants (ou on fait upsert)
-      // Pour simplifier, on supprime tous les liens pour ce client puis on réinsère
-      // (ou on pourrait faire un upsert)
       if (clientId) {
-        // Supprimer les anciennes entrées
         await supabase
           .from("client_documents")
           .delete()
           .eq("client_id", clientId);
 
-        // Préparer les nouvelles entrées
         const docsToInsert = clientDocuments
           .filter((d) => d.status && d.document_id)
           .map((d) => ({
@@ -527,7 +497,6 @@ export default function ClientsPage() {
           if (docsError) throw docsError;
         }
 
-        // 3. Sauvegarder les taxes (client_taxes)
         await supabase.from("client_taxes").delete().eq("client_id", clientId);
 
         const taxesToInsert = clientTaxes
@@ -562,7 +531,6 @@ export default function ClientsPage() {
     }
   };
 
-  // ===== Filtrage des clients =====
   const filtered = clients.filter((c) => {
     const matchSearch =
       c.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -574,7 +542,6 @@ export default function ClientsPage() {
     return matchSearch && matchCountry && matchNature;
   });
 
-  // ===== Rendu =====
   return (
     <div className="page-container">
       <PageHeader
@@ -608,6 +575,7 @@ export default function ClientsPage() {
             value={filterCountry}
             onChange={(e) => setFilterCountry(e.target.value)}
             className="auth-input py-2.5 px-3 text-white bg-slate-800 border-slate-600 focus:border-primary-500 rounded-lg"
+            style={{ color: "black" }}
           >
             <option value="all">🌍 Tous les pays</option>
             {COUNTRIES.map((c) => (
@@ -620,6 +588,7 @@ export default function ClientsPage() {
             value={filterNature}
             onChange={(e) => setFilterNature(e.target.value)}
             className="auth-input py-2.5 px-3 text-white bg-slate-800 border-slate-600 focus:border-primary-500 rounded-lg"
+            style={{ color: "black" }}
           >
             <option value="all">📋 Toutes les natures</option>
             {NATURE_OPTIONS.map((n) => (
@@ -733,7 +702,7 @@ export default function ClientsPage() {
         )}
       </div>
 
-      {/* ========== MODAL AJOUT / MODIFICATION ========== */}
+      {/* ========== MODAL ========== */}
       {modal.open && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
@@ -813,6 +782,7 @@ export default function ClientsPage() {
                           await handleCountryChange(e.target.value)
                         }
                         className="auth-input w-full px-3 py-2 text-sm bg-white border-slate-300"
+                        style={{ color: "black" }}
                       >
                         {COUNTRIES.map((c) => (
                           <option key={c.code} value={c.code}>
@@ -835,6 +805,7 @@ export default function ClientsPage() {
                         )
                       }
                       className="auth-input w-full px-3 py-2 text-sm bg-white border-slate-300"
+                      style={{ color: "black" }}
                     >
                       <option value="">-- Sélectionner --</option>
                       {refs.natures.map((n) => (
@@ -986,6 +957,7 @@ export default function ClientsPage() {
                           )
                         }
                         className="auth-input w-full px-3 py-2 text-sm bg-white border-slate-300"
+                        style={{ color: "black" }}
                       >
                         <option value="">-- Sélectionner --</option>
                         {refs.formes.map((f) => (
@@ -1066,6 +1038,7 @@ export default function ClientsPage() {
                                   )
                                 }
                                 className="border rounded px-2 py-1 text-xs bg-white"
+                                style={{ color: "black" }}
                               >
                                 <option value="a_fournir">À fournir</option>
                                 <option value="fourni">Fourni</option>
@@ -1098,6 +1071,7 @@ export default function ClientsPage() {
                           )
                         }
                         className="auth-input w-full px-3 py-2 text-sm bg-white border-slate-300"
+                        style={{ color: "black" }}
                       >
                         <option value="">-- Sélectionner --</option>
                         {refs.statuts.map((s) => (
@@ -1120,6 +1094,7 @@ export default function ClientsPage() {
                           )
                         }
                         className="auth-input w-full px-3 py-2 text-sm bg-white border-slate-300"
+                        style={{ color: "black" }}
                       >
                         <option value="">-- Sélectionner --</option>
                         {refs.regimes.map((r) => (
@@ -1199,6 +1174,7 @@ export default function ClientsPage() {
                                   )
                                 }
                                 className="border rounded px-2 py-1 text-xs bg-white"
+                                style={{ color: "black" }}
                               >
                                 <option value="a_fournir">À fournir</option>
                                 <option value="fourni">Fourni</option>
@@ -1543,6 +1519,7 @@ export default function ClientsPage() {
                                   )
                                 }
                                 className="border rounded px-2 py-1 text-xs bg-white"
+                                style={{ color: "black" }}
                               >
                                 <option value="a_fournir">À fournir</option>
                                 <option value="fourni">Fourni</option>

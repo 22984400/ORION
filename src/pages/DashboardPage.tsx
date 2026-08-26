@@ -184,7 +184,7 @@ export function DashboardPage() {
   const {
     data: invoices,
     loading: invLoading,
-    error: _invError, // préfixé pour éviter l'erreur "unused"
+    error: _invError,
   } = useSupabaseQuery<any>({
     table: "invoices",
     select:
@@ -217,7 +217,7 @@ export function DashboardPage() {
     },
   });
 
-  // Test direct Supabase (réécrit en async/await pour éviter l'erreur de typage)
+  // Test direct Supabase
   useEffect(() => {
     const fetchClients = async () => {
       try {
@@ -231,8 +231,11 @@ export function DashboardPage() {
   }, []);
 
   // ---- Calculs KPI ----
-  const activeEngagements = engagements.filter((e) =>
-    ["planning", "in_progress", "review"].includes(e.status),
+  // 🔥 Correction : on considère comme actives toutes les missions dont le statut n'est pas un statut final
+  // Liste des statuts finaux à adapter selon votre base (ex: "Terminé", "Annulé", "Clôturé", "Archivé")
+  const finalStatuses = ["Terminé", "Annulé", "Clôturé", "Archivé"];
+  const activeEngagements = engagements.filter(
+    (e) => !finalStatuses.includes(e.status),
   ).length;
 
   const openReviewNotes = reviewNotes.filter((n) => n.status === "open").length;
@@ -253,26 +256,24 @@ export function DashboardPage() {
   // ============================================================
   console.log("🔍 Données brutes des immobilisations :", assets);
 
-  // 1. Calcul de la VNC pour les actifs actifs (statut "Active")
   const computedVNC = assets
-    .filter((a) => (a.status as string) === "Active") // ← cast pour éviter l'erreur de type
+    .filter((a) => (a.status as string) === "Active")
     .reduce((sum, a) => {
       const purchase = a.purchase_value || 0;
       if (purchase === 0) return sum;
 
-      // Durée d'utilité (par défaut 10 ans)
       const years = a.useful_life_years || 10;
       const annualDep = purchase / years;
 
-      // Âge en années (converti en nombre)
       let age = 0;
       if (a.acquisition_date) {
         const acquisitionDate = new Date(a.acquisition_date);
         const now = new Date();
-        age = Math.max(0, now.getFullYear() - acquisitionDate.getFullYear());
+        age = Number(
+          Math.max(0, now.getFullYear() - acquisitionDate.getFullYear()),
+        );
       }
 
-      // Cumul d'amortissement (ne peut pas dépasser la valeur d'achat)
       const accumulated = Math.min(annualDep * age, purchase);
       const netBook = purchase - accumulated;
 
@@ -282,18 +283,15 @@ export function DashboardPage() {
       return sum + netBook;
     }, 0);
 
-  // 2. Fallback : si la VNC est 0, on utilise la somme des valeurs d'acquisition des actifs actifs
   const fallbackValue = assets
     .filter((a) => (a.status as string) === "Active")
     .reduce((sum, a) => sum + (a.purchase_value || 0), 0);
 
-  // 3. Valeur finale affichée
   const assetValue = computedVNC > 0 ? computedVNC : fallbackValue;
 
   console.log("✅ Valeur nette comptable calculée :", computedVNC);
   console.log("✅ Valeur affichée (fallback si 0) :", assetValue);
 
-  const _employeesOnLeave = leave.filter((l) => l.status === "approved").length; // préfixé car non utilisé
   const openExpenseReports = expenseReports.filter(
     (r) => r.status === "soumis" || r.status === "brouillon",
   ).length;
@@ -377,19 +375,18 @@ export function DashboardPage() {
   );
 
   // ---- Graphiques ----
+  // ✅ Graphique des missions : utilisation directe de client_name ou subject
   const engagementChart = useMemo(() => {
     if (!engagements || engagements.length === 0) return [];
 
-    const clientMap = new Map(clients.map((c) => [c.id, c.name]));
-
     return engagements
       .map((m) => ({
-        name: String(clientMap.get(m.client_id) || m.subject || "Sans nom"), // force le type string
+        name: String(m.client_name || m.subject || "Sans nom"),
         value: m.progress || 0,
       }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 10);
-  }, [engagements, clients]);
+  }, [engagements]);
 
   const reviewNotesChart = useMemo(
     () => buildReviewNotesStatusChart(reviewNotes),

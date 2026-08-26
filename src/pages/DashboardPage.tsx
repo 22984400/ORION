@@ -184,7 +184,7 @@ export function DashboardPage() {
   const {
     data: invoices,
     loading: invLoading,
-    error: invError,
+    error: _invError, // préfixé pour éviter l'erreur "unused"
   } = useSupabaseQuery<any>({
     table: "invoices",
     select:
@@ -217,13 +217,17 @@ export function DashboardPage() {
     },
   });
 
-  // Test direct Supabase
+  // Test direct Supabase (réécrit en async/await pour éviter l'erreur de typage)
   useEffect(() => {
-    supabase
-      .from("clients")
-      .select("*")
-      .then((res) => console.log("direct supabase fetch (clients):", res))
-      .catch((e) => console.error("direct supabase fetch error", e));
+    const fetchClients = async () => {
+      try {
+        const res = await supabase.from("clients").select("*");
+        console.log("direct supabase fetch (clients):", res);
+      } catch (e) {
+        console.error("direct supabase fetch error", e);
+      }
+    };
+    fetchClients();
   }, []);
 
   // ---- Calculs KPI ----
@@ -244,11 +248,52 @@ export function DashboardPage() {
     0,
   );
 
-  const assetValue = assets
-    .filter((a) => a.status === "active")
-    .reduce((s, a) => s + (a.net_book_value || 0), 0);
+  // ============================================================
+  // 🔥 CALCUL DE LA VALEUR DES IMMOBILISATIONS (VNC)
+  // ============================================================
+  console.log("🔍 Données brutes des immobilisations :", assets);
 
-  const employeesOnLeave = leave.filter((l) => l.status === "approved").length;
+  // 1. Calcul de la VNC pour les actifs actifs (statut "Active")
+  const computedVNC = assets
+    .filter((a) => (a.status as string) === "Active") // ← cast pour éviter l'erreur de type
+    .reduce((sum, a) => {
+      const purchase = a.purchase_value || 0;
+      if (purchase === 0) return sum;
+
+      // Durée d'utilité (par défaut 10 ans)
+      const years = a.useful_life_years || 10;
+      const annualDep = purchase / years;
+
+      // Âge en années (converti en nombre)
+      let age = 0;
+      if (a.acquisition_date) {
+        const acquisitionDate = new Date(a.acquisition_date);
+        const now = new Date();
+        age = Math.max(0, now.getFullYear() - acquisitionDate.getFullYear());
+      }
+
+      // Cumul d'amortissement (ne peut pas dépasser la valeur d'achat)
+      const accumulated = Math.min(annualDep * age, purchase);
+      const netBook = purchase - accumulated;
+
+      console.log(
+        `📊 ${a.asset_name}: achat=${purchase}, âge=${age} ans, VNC=${netBook}`,
+      );
+      return sum + netBook;
+    }, 0);
+
+  // 2. Fallback : si la VNC est 0, on utilise la somme des valeurs d'acquisition des actifs actifs
+  const fallbackValue = assets
+    .filter((a) => (a.status as string) === "Active")
+    .reduce((sum, a) => sum + (a.purchase_value || 0), 0);
+
+  // 3. Valeur finale affichée
+  const assetValue = computedVNC > 0 ? computedVNC : fallbackValue;
+
+  console.log("✅ Valeur nette comptable calculée :", computedVNC);
+  console.log("✅ Valeur affichée (fallback si 0) :", assetValue);
+
+  const _employeesOnLeave = leave.filter((l) => l.status === "approved").length; // préfixé car non utilisé
   const openExpenseReports = expenseReports.filter(
     (r) => r.status === "soumis" || r.status === "brouillon",
   ).length;
@@ -332,16 +377,14 @@ export function DashboardPage() {
   );
 
   // ---- Graphiques ----
-  // 🔹 On construit manuellement le graphique des missions avec les noms des clients
   const engagementChart = useMemo(() => {
     if (!engagements || engagements.length === 0) return [];
 
-    // Créer un dictionnaire client_id → nom
     const clientMap = new Map(clients.map((c) => [c.id, c.name]));
 
     return engagements
       .map((m) => ({
-        name: clientMap.get(m.client_id) || m.subject || "Sans nom",
+        name: String(clientMap.get(m.client_id) || m.subject || "Sans nom"), // force le type string
         value: m.progress || 0,
       }))
       .sort((a, b) => b.value - a.value)

@@ -1,19 +1,21 @@
-// src/pages/missions/cac/CalculHonoraires.tsx
+// src/pages/missions/cac/CalculHonaraires.tsx (Top part only)
 import { useState, useEffect } from "react";
 import { supabase } from "../../../lib/supabase";
 import { Calculator } from "lucide-react";
+import { RetourButton } from "../../../components/ui/RetourButton";
 
 interface Props {
   missionId?: string;
-  clientId?: string;
+  clientId?: string; // Kept in interface for external compatibility
   onCalculComplete?: (resultats: any) => void;
 }
 
 export function CalculHonoraires({
   missionId,
-  clientId,
+  clientId: _clientId, // Renamed here to suppress warning
   onCalculComplete,
 }: Props) {
+  // ... rest of your component remains exactly the same
   const [donnees, setDonnees] = useState({
     total_bilan: "",
     produits_exploitation: "",
@@ -39,7 +41,6 @@ export function CalculHonoraires({
   }
 
   async function loadMission() {
-    // Charger les données de la mission existante
     if (!missionId) return;
     const { data } = await supabase
       .from("missions_cac")
@@ -76,7 +77,6 @@ export function CalculHonoraires({
     const heuresMin = getHeuresParTranche(assiette);
     const temps = parseFloat(donnees.temps_retenu) || heuresMin;
 
-    // Tarifs par grade (par défaut)
     const intervenants = [
       { grade: "associe_signataire", pourcentage: 10, taux: 45000 },
       { grade: "chef_mission", pourcentage: 40, taux: 35000 },
@@ -133,7 +133,8 @@ export function CalculHonoraires({
 
   return (
     <div className="space-y-6">
-      {/* Données financières */}
+      <RetourButton />
+
       <div className="card p-6">
         <h3 className="text-sm font-semibold text-gray-700 mb-4">
           Données financières
@@ -193,7 +194,6 @@ export function CalculHonoraires({
         </div>
       </div>
 
-      {/* Paramètres */}
       <div className="card p-6">
         <h3 className="text-sm font-semibold text-gray-700 mb-4">Paramètres</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -245,7 +245,6 @@ export function CalculHonoraires({
         </div>
       </div>
 
-      {/* Bouton Calculer */}
       <button
         onClick={calculer}
         className="btn-primary btn-md flex items-center gap-2"
@@ -253,7 +252,6 @@ export function CalculHonoraires({
         <Calculator className="w-4 h-4" /> Calculer
       </button>
 
-      {/* Résultats */}
       {resultats && (
         <div className="card p-6 bg-blue-50 border-blue-200">
           <h3 className="text-sm font-semibold text-blue-800 mb-3">

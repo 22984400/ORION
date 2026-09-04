@@ -1,6 +1,7 @@
 // src/pages/collaborateurs/CollaborateurList.tsx
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import styled from "styled-components";
 import { supabase } from "../../lib/supabase";
 import { format } from "date-fns";
@@ -120,6 +121,7 @@ interface Collaborateur {
 }
 
 export const CollaborateurList: React.FC = () => {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [collaborateurs, setCollaborateurs] = useState<Collaborateur[]>([]);
@@ -153,7 +155,7 @@ export const CollaborateurList: React.FC = () => {
   if (loading) {
     return (
       <LoadingContainer>
-        <i className="fas fa-spinner fa-spin"></i> Chargement...
+        <i className="fas fa-spinner fa-spin"></i> {t("common.loading")}
       </LoadingContainer>
     );
   }

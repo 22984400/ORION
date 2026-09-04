@@ -760,5 +760,216 @@
       "generic": "Une erreur est survenue. Veuillez réessayer.",
       "invalidCredentials": "E-mail ou mot de passe incorrect."
     }
+  },
+  "noteDeFrais": {
+    "title": "Notes de frais",
+    "newExpense": "Nouvelle note de frais",
+    "editExpense": "Modifier la note de frais",
+    "deleteExpense": "Supprimer cette note ?",
+    "collaborator": "Collaborateur",
+    "initials": "Initiales",
+    "phone": "Téléphone",
+    "address": "Adresse",
+    "startDate": "Date début",
+    "endDate": "Date fin",
+    "month": "Mois",
+    "mission": "Mission",
+    "client": "Client",
+    "taxRate": "Taux TVA (%)",
+    "advance": "Avance",
+    "paymentMethod": "Modalité de règlement",
+    "status": "Statut",
+    "expenseLines": "Lignes de frais",
+    "date": "Date",
+    "designation": "Désignation",
+    "quantity": "Qté",
+    "currency": "Devise",
+    "amountHT": "Montant HT",
+    "tax": "TVA",
+    "amountTTC": "Montant TTC",
+    "addLine": "Ajouter une ligne",
+    "exportPDF": "Exporter PDF",
+    "create": "Créer la note",
+    "update": "Mettre à jour",
+    "errorLoading": "Erreur chargement missions",
+    "errorSaving": "Erreur sauvegarde"
+  },
+  "missions": {
+    "cac": {
+      "title": "Missions CAC",
+      "new": "Nouvelle mission CAC",
+      "edit": "Modifier mission",
+      "delete": "Supprimer cette mission ?",
+      "client": "Client",
+      "exercice": "Exercice",
+      "balance": "Bilan",
+      "revenue": "Produits d'exploitation",
+      "financial": "Produits financiers",
+      "coefficient": "Coefficient multiplicateur",
+      "discount": "Décote (%)",
+      "calculate": "Calculer",
+      "save": "Enregistrer",
+      "results": "Résultats",
+      "summary": "Récapitulatif",
+      "details": "Détails",
+      "status": {
+        "draft": "Brouillon",
+        "validated": "Validé",
+        "invoice_issued": "Facture émise",
+        "invoice_paid": "Payée"
+      },
+      "errorLoading": "Erreur chargement mission",
+      "errorSaving": "Erreur enregistrement",
+      "selectClient": "Veuillez sélectionner un client.",
+      "enterFiscalYear": "Veuillez saisir un exercice.",
+      "negativeAmounts": "Les montants ne peuvent pas être négatifs.",
+      "positiveCoefficient": "Le coefficient doit être supérieur à 0.",
+      "discountRange": "La décote doit être comprise entre 0 et 100 %."
+    }
+  },
+  "documentsTravail": {
+    "title": "Documents de travail",
+    "newDocument": "Nouveau document",
+    "uploadFile": "Téléverser fichier",
+    "deleteDocument": "Supprimer ce document ?",
+    "name": "Nom",
+    "category": "Catégorie",
+    "file": "Fichier",
+    "size": "Taille",
+    "uploadedOn": "Téléversé le",
+    "selectFile": "Veuillez sélectionner un fichier",
+    "enterName": "Veuillez saisir un nom",
+    "errorUpload": "Erreur upload",
+    "errorDelete": "Erreur suppression"
+  },
+  "collaborateurs": {
+    "title": "Collaborateurs",
+    "new": "Nouveau collaborateur",
+    "edit": "Modifier collaborateur",
+    "delete": "Supprimer ce collaborateur ?",
+    "name": "Nom",
+    "firstName": "Prénom",
+    "function": "Fonction",
+    "country": "Pays",
+    "hireDate": "Date embauche",
+    "photo": "Photo",
+    "cv": "CV",
+    "id": "CNI",
+    "errorLoading": "Erreur chargement collaborateur",
+    "errorSaving": "Erreur sauvegarde",
+    "errorUpload": "Erreur upload fichier"
+  },
+  "clients": {
+    "title": "Clients",
+    "new": "Nouveau client",
+    "edit": "Modifier client",
+    "delete": "Supprimer ce client ?",
+    "code": "Code",
+    "name": "Nom",
+    "country": "Pays",
+    "nature": "Nature",
+    "manager": "Gérant",
+    "city": "Ville",
+    "errorLoading": "Erreur chargement clients",
+    "errorSaving": "Erreur sauvegarde"
+  },
+  "engagements": {
+    "title": "Missions",
+    "new": "Nouvelle mission",
+    "delete": "Supprimer cette mission ?",
+    "started": "🚀 Mission démarrée",
+    "completed": "✅ Mission terminée",
+    "errorLoading": "Erreur chargement",
+    "errorDeleting": "Erreur suppression"
+  },
+  "leave": {
+    "title": "Congés",
+    "request": "Demander un congé",
+    "hireDate": "Date d'embauche",
+    "updateDate": "Mettre à jour la date d'embauche",
+    "selectDate": "Veuillez sélectionner une date.",
+    "error": "Erreur : {{message}}"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "markAllRead": "Tout marquer lu",
+    "retry": "Réessayer",
+    "error": "Erreur : {{message}}"
+  },
+  "facture": {
+    "title": "Factures",
+    "new": "Nouvelle facture",
+    "edit": "Modifier facture",
+    "modify": "Modifier",
+    "document": {
+      "facture": "Facture",
+      "avoir": "Avoir",
+      "proforma": "Pro‑forma"
+    },
+    "reference": "Référence",
+    "type": "Type",
+    "archive": "Archiver cette facture ? Elle ne sera plus visible dans la liste.",
+    "errorArchive": "Erreur archivage"
+  },
+  "findingsPage": {
+    "new": "Nouveau constat",
+    "saved": "Constat mis à jour",
+    "created": "Nouveau constat",
+    "errorSaving": "Erreur sauvegarde"
+  },
+  "reviewNotes": {
+    "title": "Notes de revue",
+    "new": "Nouvelle note",
+    "delete": "Supprimer cette note ?",
+    "status": {
+      "open": "Ouvert",
+      "in_progress": "En cours",
+      "resolved": "Résolu"
+    },
+    "severity": {
+      "minor": "Mineur",
+      "significant": "Significatif",
+      "critical": "Critique"
+    },
+    "errorAdding": "Erreur ajout",
+    "errorCreating": "Erreur création",
+    "errorUpdating": "Erreur mise à jour",
+    "errorDeleting": "Erreur suppression"
+  },
+  "resources": {
+    "title": "Ressources internes",
+    "deletePermanently": "Supprimer définitivement",
+    "error": "Erreur : {{message}}"
+  },
+  "workingPapers": {
+    "title": "Documents de travail",
+    "delete": "Supprimer définitivement ce document ?",
+    "errorUpload": "Erreur upload",
+    "errorDelete": "Erreur suppression"
+  },
+  "stock": {
+    "selectFile": "Veuillez sélectionner un fichier",
+    "enterName": "Veuillez saisir un nom",
+    "creatingError": "Erreur création article : {{message}}",
+    "deletingError": "Erreur suppression"
+  },
+  "caisse": {
+    "deleteRecord": "Supprimer cette pièce ?",
+    "deletePiece": "Supprimer cette pièce ?",
+    "error": "Erreur : {{message}}"
+  },
+  "fournisseur": {
+    "delete": "Supprimer ce fournisseur ?",
+    "error": "Erreur : {{message}}"
+  },
+  "manuel": {
+    "title": "Manuel",
+    "deleteIntervenant": "Supprimer cet intervenant ?",
+    "deleteClient": "Supprimer ce client ?",
+    "deleteMission": "Supprimer cette mission ?",
+    "deleteLine": "Supprimer cette ligne ?",
+    "selectFile": "Veuillez sélectionner un fichier Word (.docx ou .doc)",
+    "uploadSuccess": "Document importé avec succès !",
+    "error": "Erreur : {{message}}"
   }
 }

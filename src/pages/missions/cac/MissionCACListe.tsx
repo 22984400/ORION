@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { supabase } from "../../../lib/supabase";
 import { PageHeader } from "../../../components/ui/PageHeader";
 import { Badge } from "../../../components/ui/Badge";
+import { RetourButton } from "../../../components/ui/RetourButton";
 import { formatCurrency } from "../../../lib/utils";
 
 type MissionCAC = {
@@ -74,8 +75,13 @@ export default function MissionCACListe() {
     }
   }
 
-  function getStatutBadge(statut: string) {
-    const variants: Record<string, string> = {
+  function getStatutBadge(
+    statut: string,
+  ): "error" | "success" | "neutral" | "primary" | "warning" | "info" {
+    const variants: Record<
+      string,
+      "error" | "success" | "neutral" | "primary" | "warning" | "info"
+    > = {
       brouillon: "neutral",
       valide: "success",
       facture_emise: "warning",
@@ -96,6 +102,8 @@ export default function MissionCACListe() {
 
   return (
     <div className="page-container">
+      <RetourButton />
+
       <PageHeader
         title="Missions CAC"
         description="Gestion des missions de commissariat aux comptes"

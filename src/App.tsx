@@ -7,23 +7,26 @@ import {
   Navigate,
   Outlet,
 } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { AppLayout } from "./components/layout/AppLayout";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
 import { AuthPage } from "./pages/auth/AuthPage";
 
 // ========== FALLBACK ==========
 function LoadingFallback() {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center justify-center h-[50vh]">
       <div className="flex flex-col items-center gap-3">
         <div className="w-8 h-8 border-2 border-primary-500/30 border-t-primary-500 rounded-full animate-spin" />
-        <p className="text-sm text-slate-400">Chargement...</p>
+        <p className="text-sm text-slate-400">{t("common.loading")}</p>
       </div>
     </div>
   );
 }
 
 function ErrorFallback({ error }: { error: Error }) {
+  const { t } = useTranslation();
   return (
     <div
       style={{
@@ -33,11 +36,11 @@ function ErrorFallback({ error }: { error: Error }) {
         minHeight: "100vh",
       }}
     >
-      <h2>Erreur de chargement</h2>
+      <h2>{t("app.errorLoading")}</h2>
       <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
         {error.message}
       </pre>
-      <button onClick={() => window.location.reload()}>Réessayer</button>
+      <button onClick={() => window.location.reload()}>{t("app.retry")}</button>
     </div>
   );
 }
@@ -46,7 +49,7 @@ function ErrorFallback({ error }: { error: Error }) {
 const lazyWithError = (importFn: () => Promise<any>) => {
   return lazy(() =>
     importFn().catch((error) => {
-      console.error("Erreur de chargement du composant:", error);
+      console.error("Error loading component:", error);
       return { default: () => <ErrorFallback error={error} /> };
     }),
   );

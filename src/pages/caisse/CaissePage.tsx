@@ -1,6 +1,7 @@
 // src/pages/Caisse/CaissePage.tsx
 import React, { useEffect, useState, useRef } from "react";
 import styled from "styled-components";
+import { useTranslation } from "react-i18next";
 import { supabase } from "../../lib/supabase";
 import { addNotification } from "../../lib/notifications";
 import { format } from "date-fns";
@@ -367,6 +368,7 @@ const EmptyState = styled.div`
 
 // ========== COMPOSANT PRINCIPAL ==========
 export const CaissePage: React.FC = () => {
+  const { t } = useTranslation();
   const [type, setType] = useState<"DEPENSE" | "APPROVISIONNEMENT">("DEPENSE");
   const [form, setForm] = useState({
     destinataire: "",
@@ -456,23 +458,23 @@ export const CaissePage: React.FC = () => {
     e.preventDefault();
 
     if (!form.somme || parseFloat(form.somme) <= 0) {
-      alert("Veuillez saisir un montant valide.");
+      alert(t("errors.generic"));
       return;
     }
     if (!form.lieu) {
-      alert("Veuillez saisir le lieu (Fait à).");
+      alert(t("errors.generic"));
       return;
     }
     if (!form.date_piece) {
-      alert("Veuillez saisir la date.");
+      alert(t("errors.generic"));
       return;
     }
     if (type === "DEPENSE" && !form.destinataire) {
-      alert("Veuillez saisir le destinataire.");
+      alert(t("errors.generic"));
       return;
     }
     if (type === "APPROVISIONNEMENT" && !form.recu_de) {
-      alert("Veuillez saisir le nom (Reçu de).");
+      alert(t("errors.generic"));
       return;
     }
 
@@ -521,14 +523,14 @@ export const CaissePage: React.FC = () => {
       });
       await loadData();
     } catch (err: any) {
-      alert("Erreur : " + err.message);
+      alert(t("errors.savingError"));
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("Supprimer cette pièce ?")) return;
+    if (!window.confirm(t("confirms.deletePiece"))) return;
     try {
       const { error } = await supabase.from("caisse").delete().eq("id", id);
       if (error) throw error;
@@ -539,7 +541,7 @@ export const CaissePage: React.FC = () => {
         type: "caisse",
       });
     } catch (err: any) {
-      alert("Erreur : " + err.message);
+      alert(t("errors.deletingError"));
     }
   };
 

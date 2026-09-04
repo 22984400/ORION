@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { PackagePlus, PackageMinus, Search, X, Edit } from "lucide-react";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Badge } from "../../components/ui/Badge";
@@ -10,6 +11,7 @@ import { supabase } from "../../lib/supabase";
 import type { StockItem } from "../../types";
 
 export function StockPage() {
+  const { t } = useTranslation();
   const [items, setItems] = useState<StockItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -94,7 +96,7 @@ export function StockPage() {
       .single();
 
     if (error) {
-      alert("Erreur lors de la création de l'article : " + error.message);
+      alert(t("stock.creatingError", { message: error.message }));
       return null;
     }
 
@@ -110,7 +112,7 @@ export function StockPage() {
   // ----- ENTRÉE -----
   const handleStockIn = async () => {
     if (stockInForm.quantity <= 0) {
-      alert("La quantité doit être supérieure à 0");
+      alert(t("errors.generic"));
       return;
     }
 
@@ -165,7 +167,7 @@ export function StockPage() {
       setShowStockIn(false);
       setStockInForm({ item_name: "", quantity: 1, unit_cost: 0, note: "" });
     } catch (err: any) {
-      alert("Erreur : " + err.message);
+      alert(t("errors.savingError"));
     } finally {
       setSubmitting(false);
     }
@@ -174,7 +176,7 @@ export function StockPage() {
   // ----- SORTIE -----
   const handleStockOut = async () => {
     if (stockOutForm.quantity <= 0) {
-      alert("La quantité doit être supérieure à 0");
+      alert(t("errors.generic"));
       return;
     }
 
@@ -187,7 +189,7 @@ export function StockPage() {
       }
 
       if (stockOutForm.quantity > item.remaining_quantity) {
-        alert(`Stock insuffisant. Disponible : ${item.remaining_quantity}`);
+        alert(t("stock.deletingError"));
         setSubmitting(false);
         return;
       }
@@ -224,7 +226,7 @@ export function StockPage() {
       setShowStockOut(false);
       setStockOutForm({ item_name: "", quantity: 1, note: "" });
     } catch (err: any) {
-      alert("Erreur : " + err.message);
+      alert(t("errors.savingError"));
     } finally {
       setSubmitting(false);
     }
@@ -265,7 +267,7 @@ export function StockPage() {
       setShowEditModal(false);
       setEditingItem(null);
     } catch (err: any) {
-      alert("Erreur : " + err.message);
+      alert(t("errors.savingError"));
     } finally {
       setSubmitting(false);
     }

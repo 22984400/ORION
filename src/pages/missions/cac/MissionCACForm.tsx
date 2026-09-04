@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useParams, Link } from "react-router-dom";
-import { Save, Calculator, ArrowLeft } from "lucide-react";
+import { useNavigate, useParams } from "react-router-dom";
+import { Save, Calculator } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 import { PageHeader } from "../../../components/ui/PageHeader";
 import { Badge } from "../../../components/ui/Badge";
+import { RetourButton } from "../../../components/ui/RetourButton";
 import { formatCurrency } from "../../../lib/utils";
 
 export default function MissionCACForm() {
@@ -81,11 +82,9 @@ export default function MissionCACForm() {
 
   const handleFieldChange = (field: string, value: any) => {
     setMission((prev: any) => ({ ...prev, [field]: value }));
-    // Effacer l'erreur quand l'utilisateur modifie un champ
     if (errorMessage) setErrorMessage(null);
   };
 
-  // Validation simple avant sauvegarde
   const validateMission = () => {
     if (!mission.client_id) {
       setErrorMessage("Veuillez sélectionner un client.");
@@ -116,7 +115,6 @@ export default function MissionCACForm() {
   const handleCalcul = async () => {
     if (!validateMission()) return;
 
-    // Pour une nouvelle mission, on la crée d'abord, puis on calcule
     if (!isEdit) {
       try {
         const payload = buildPayload();
@@ -126,7 +124,6 @@ export default function MissionCACForm() {
           .select()
           .single();
         if (error) throw error;
-        // Rediriger vers l'édition de cette nouvelle mission
         navigate(`/missions/cac/${data.id}/edit`);
         return;
       } catch (err: any) {
@@ -135,7 +132,6 @@ export default function MissionCACForm() {
         return;
       }
     } else {
-      // Mise à jour des données puis calcul
       try {
         const updates = buildPayload();
         const { error } = await supabase
@@ -150,7 +146,7 @@ export default function MissionCACForm() {
         );
         if (calcError) throw calcError;
         setResultats(data);
-        await loadMission(); // recharge les données mises à jour
+        await loadMission();
       } catch (err: any) {
         console.error("Erreur calcul:", err);
         setErrorMessage(`Erreur lors du calcul: ${err.message}`);
@@ -158,7 +154,6 @@ export default function MissionCACForm() {
     }
   };
 
-  // Construction du payload commun
   const buildPayload = () => ({
     client_id: mission.client_id,
     exercice: mission.exercice,
@@ -190,14 +185,12 @@ export default function MissionCACForm() {
           .select()
           .single();
         if (error) throw error;
-        // Rediriger vers l'édition de la nouvelle mission
         navigate(`/missions/cac/${data.id}/edit`);
         return;
       }
       navigate("/missions/cac");
     } catch (err: any) {
       console.error("Erreur enregistrement:", err);
-      // Afficher l'erreur complète de Supabase
       const msg =
         err.message ||
         err.details ||
@@ -218,6 +211,8 @@ export default function MissionCACForm() {
 
   return (
     <div className="page-container">
+      <RetourButton />
+
       <PageHeader
         title={isEdit ? "Modifier la mission CAC" : "Nouvelle mission CAC"}
         description={
@@ -251,9 +246,7 @@ export default function MissionCACForm() {
         </div>
       )}
 
-      {/* Le reste du formulaire (identique à l’original) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* ... le même JSX que vous aviez, sans modification */}
         <div className="lg:col-span-2 space-y-6">
           <div className="card p-6">
             <h3 className="text-sm font-semibold text-gray-700 mb-4">

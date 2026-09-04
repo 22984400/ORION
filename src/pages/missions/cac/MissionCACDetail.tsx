@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, Edit2, FileText, Printer } from "lucide-react";
+import { Edit2, FileText, Printer } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 import { PageHeader } from "../../../components/ui/PageHeader";
 import { Badge } from "../../../components/ui/Badge";
+import { RetourButton } from "../../../components/ui/RetourButton";
 import { formatCurrency } from "../../../lib/utils";
 
 export default function MissionCACDetail() {
@@ -57,6 +58,9 @@ export default function MissionCACDetail() {
 
   return (
     <div className="page-container">
+      {/* RETOUR BUTTON */}
+      <RetourButton />
+
       <PageHeader
         title={`Mission CAC – ${mission.clients?.name || "Client"}`}
         description={`Exercice ${mission.exercice}`}
@@ -208,7 +212,8 @@ export default function MissionCACDetail() {
                 <span>Marge estimée</span>
                 <span>
                   {formatCurrency(mission.marge_estimee || 0)}
-                  {mission.total_budget && (
+                  {/* FIX APPLIED HERE: Checks for > 0 */}
+                  {mission.total_budget > 0 && (
                     <span className="text-xs ml-1">
                       (
                       {(

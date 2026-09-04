@@ -15,26 +15,13 @@ import { saveAs } from "file-saver";
 // ============================================================
 // TYPES
 // ============================================================
-type ModuleId =
-  | "missions"
-  | "review_notes"
-  | "findings"
-  | "stock_items"
-  | "fixed_assets"
-  | "leave_requests"
-  | "clients"
-  | "cac"
-  | "collaborateurs"
-  | "factures"
-  | "notes_de_frais"
-  | "etablissements"
-  | "client_documents"
-  | "client_taxes";
+// Changed to string to support dynamic tables
+type ModuleId = string;
 
 type ModuleConfig = {
   table: string;
   label: string;
-  dateColumn: string; // which column to use for date filtering
+  dateColumn: string;
 };
 
 type ModuleState = {
@@ -53,9 +40,9 @@ type CustomReportResult = {
 };
 
 // ============================================================
-// CONFIGURATION
+// CONFIGURATION (Fallback & Labels)
 // ============================================================
-const MODULE_CONFIG: Record<ModuleId, ModuleConfig> = {
+const MODULE_CONFIG: Record<string, ModuleConfig> = {
   missions: { table: "weekly_missions", label: "Missions", dateColumn: "date" },
   review_notes: {
     table: "review_notes",
@@ -153,11 +140,9 @@ export default function ReportsPage() {
     new Date().toISOString().split("T")[0],
   );
   const [customNotes, setCustomNotes] = useState("");
-
-  // Nouvel état : ignorer les dates
   const [ignoreDates, setIgnoreDates] = useState(false);
 
-  // État des modules (cochés)
+  // Dynamic Modules State
   const [modules, setModules] = useState<ModuleState[]>(() =>
     MODULE_IDS.map((id) => ({
       id,
@@ -166,13 +151,80 @@ export default function ReportsPage() {
     })),
   );
 
-  // Vérifier si tous les modules sont cochés
   const allChecked = useMemo(() => modules.every((m) => m.checked), [modules]);
 
-  // Chargement des onglets standards
+  // Load Standard Tabs
   useEffect(() => {
     loadData();
   }, [activeTab]);
+
+  // Fetch All Tables from Database (Dynamic Modules)
+  useEffect(() => {
+    fetchAllTables();
+  }, []);
+
+  async function fetchAllTables() {
+    try {
+      // Try to fetch all tables in the public schema
+      const { data, error } = await supabase
+        .from("information_schema.tables")
+        .select("table_name")
+        .eq("table_schema", "public");
+
+      if (error) throw error;
+
+      // Merge with existing configurations to retain labels
+      const mergedConfig = new Map<
+        string,
+        { table: string; label: string; dateColumn: string }
+      >();
+      Object.entries(MODULE_CONFIG).forEach(([key, val]) =>
+        mergedConfig.set(key, val),
+      );
+
+      (data || []).forEach((table: any) => {
+        const name: string = table.table_name;
+        // Filter out internal Supabase tables
+        if (name.startsWith("_") || name === "schema_migrations") return;
+
+        if (!mergedConfig.has(name)) {
+          // Auto-generate a nice label from the table name
+          const autoLabel = name
+            .replace(/_/g, " ")
+            .replace(/\b\w/g, (c) => c.toUpperCase());
+          mergedConfig.set(name, {
+            table: name,
+            label: autoLabel,
+            dateColumn: "created_at",
+          });
+        }
+      });
+
+      // Convert to array for module state
+      const dynamicModules: ModuleState[] = Array.from(
+        mergedConfig.entries(),
+      ).map(([id, cfg]) => ({
+        id,
+        label: cfg.label,
+        checked: false, // Default to unchecked for dynamic lists
+      }));
+
+      setModules(dynamicModules);
+    } catch (err) {
+      // Fallback: If permission is denied, use the hardcoded list
+      console.warn(
+        "Unable to fetch all tables, falling back to default list:",
+        err,
+      );
+      setModules(
+        MODULE_IDS.map((id) => ({
+          id,
+          label: MODULE_CONFIG[id].label,
+          checked: true,
+        })),
+      );
+    }
+  }
 
   async function loadData() {
     setLoading(true);
@@ -181,7 +233,7 @@ export default function ReportsPage() {
         const { data: missions } = await supabase
           .from("weekly_missions")
           .select("subject, status, progress, date")
-          .order("date", { ascending: false, nullsLast: true });
+          .order("date", { ascending: false });
         setData(missions || []);
       } else if (activeTab === "hr") {
         const { data: leaves } = await supabase
@@ -233,7 +285,11 @@ export default function ReportsPage() {
     try {
       const results: Partial<Record<ModuleId, any[]>> = {};
       for (const moduleId of selectedModules) {
-        const config = MODULE_CONFIG[moduleId];
+        const config = MODULE_CONFIG[moduleId] || {
+          table: moduleId,
+          label: moduleId,
+          dateColumn: "created_at",
+        }; // Use dynamic config for unknown tables
         const tableName = config.table;
         const dateCol = config.dateColumn;
 
@@ -243,7 +299,7 @@ export default function ReportsPage() {
             .gte(dateCol, `${customStartDate}T00:00:00`)
             .lte(dateCol, `${customEndDate}T23:59:59`);
         }
-        query = query.order(dateCol, { ascending: false, nullsLast: true });
+        query = query.order(dateCol, { ascending: false });
 
         const { data, error } = await query;
         if (!error && data) {
@@ -263,7 +319,7 @@ export default function ReportsPage() {
       ];
       for (const [id, data] of Object.entries(results)) {
         const count = (data as any[]).length;
-        const label = MODULE_CONFIG[id as ModuleId].label;
+        const label = MODULE_CONFIG[id]?.label || id;
         summaryLines.push(`  - ${count} ${label}${count > 1 ? "s" : ""}`);
       }
       if (customNotes.trim()) {
@@ -338,7 +394,8 @@ export default function ReportsPage() {
         const moduleData = data[moduleId] || [];
         const count = moduleData.length;
         totalRecords += count;
-        summarySheet.addRow([MODULE_CONFIG[moduleId].label, count]);
+        const label = MODULE_CONFIG[moduleId]?.label || moduleId;
+        summarySheet.addRow([label, count]);
       }
       summarySheet.addRow([]);
       const totalRow = summarySheet.addRow(["TOTAL", totalRecords]);
@@ -367,12 +424,11 @@ export default function ReportsPage() {
         const moduleData = data[moduleId] || [];
         if (moduleData.length === 0) continue;
 
-        const label = MODULE_CONFIG[moduleId].label;
+        const label = MODULE_CONFIG[moduleId]?.label || moduleId;
         const sheet = workbook.addWorksheet(label, {
           properties: { tabColor: { argb: "1F4E78" } },
         });
 
-        // En‑tête
         const firstItem = moduleData[0];
         const keys = Object.keys(firstItem);
         const columns = keys.map((key) => ({
@@ -382,13 +438,11 @@ export default function ReportsPage() {
         }));
         sheet.columns = columns;
 
-        // Ligne de titre
         sheet.addRow([`${label} - ${moduleData.length} enregistrements`]);
         const titleRow = sheet.getRow(1);
         titleRow.font = { bold: true, size: 14 };
         sheet.mergeCells(`A1:${String.fromCharCode(64 + columns.length)}1`);
 
-        // En‑têtes stylés (ligne 2)
         const headerRow = sheet.addRow(columns.map((c) => c.header));
         headerRow.eachCell((cell) => {
           cell.font = { bold: true, color: { argb: "FFFFFF" } };
@@ -406,7 +460,6 @@ export default function ReportsPage() {
           };
         });
 
-        // Données
         for (const item of moduleData) {
           const rowData: Record<string, any> = {};
           keys.forEach((key) => {
@@ -424,7 +477,6 @@ export default function ReportsPage() {
           });
         }
 
-        // Auto‑fit
         sheet.columns.forEach((column) => {
           let maxLength = 10;
           column.eachCell?.({ includeEmpty: true }, (cell) => {
@@ -435,7 +487,6 @@ export default function ReportsPage() {
         });
       }
 
-      // Génération du fichier
       const buffer = await workbook.xlsx.writeBuffer();
       saveAs(
         new Blob([buffer]),
@@ -510,7 +561,6 @@ export default function ReportsPage() {
               </div>
             </div>
 
-            {/* Nouvelle option : ignorer les dates */}
             <div className="flex items-center gap-2">
               <input
                 type="checkbox"
@@ -544,7 +594,7 @@ export default function ReportsPage() {
                   {allChecked ? "Désélectionner tout" : "Tout sélectionner"}
                 </button>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto">
                 {modules.map((module) => (
                   <label
                     key={module.id}
@@ -682,7 +732,6 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* Onglets */}
       <div className="flex gap-4 border-b border-gray-200 dark:border-gray-700 pb-2">
         {(["audit", "hr", "custom"] as const).map((tab) => {
           const labels = {
@@ -706,7 +755,6 @@ export default function ReportsPage() {
         })}
       </div>
 
-      {/* Tableau des données */}
       <div className="bg-white dark:bg-slate-800 rounded-xl shadow p-6">
         {data.length === 0 ? (
           <p className="text-gray-400 dark:text-gray-500 text-center py-8">
@@ -746,7 +794,6 @@ export default function ReportsPage() {
         )}
       </div>
 
-      {/* Modale */}
       <CustomReportModal />
     </div>
   );

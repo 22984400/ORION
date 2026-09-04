@@ -7,7 +7,7 @@ import { Badge } from "../../../components/ui/Badge";
 import { RetourButton } from "../../../components/ui/RetourButton";
 import { formatCurrency } from "../../../lib/utils";
 
-export default function MissionCACDetail() {
+export default function MissionCACDetail() { 
   const { id } = useParams();
   const [mission, setMission] = useState<any>(null);
   const [intervenants, setIntervenants] = useState<any[]>([]);

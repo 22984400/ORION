@@ -14,6 +14,8 @@ import {
   Package,
   Landmark,
   UserMinus,
+  Search, // <--- ADDED
+  Receipt, // <--- ADDED
 } from "lucide-react";
 import { cn, formatPercent } from "../../lib/utils";
 
@@ -83,6 +85,10 @@ const iconMap: Record<string, React.FC<{ className?: string }>> = {
   "trending-up": TrendingUp,
   "trending-down": TrendingDown,
   "dollar-sign": DollarSign,
+
+  // NEW: These now match the DashboardPage's KPI icons
+  search: Search, // For "Constats ouverts"
+  receipt: Receipt, // For "Notes de frais ouvertes"
 };
 
 export function StatCard({

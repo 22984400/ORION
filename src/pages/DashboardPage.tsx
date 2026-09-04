@@ -76,7 +76,7 @@ export function DashboardPage() {
         navigate("/stock");
         break;
       case "request-leave":
-        navigate("/leave/request");
+        navigate("/leave");
         break;
       case "upload-paper":
         navigate("/upload");

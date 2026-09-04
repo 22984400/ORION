@@ -189,10 +189,28 @@ function App() {
           <Route path="/review-notes" element={<ReviewNotesPage />} />
           <Route path="/findings" element={<FindingsPage />} />
           <Route path="/working-papers" element={<WorkingPapersPage />} />
+
+          {/* ✅ NOUVELLE LIGNE AJOUTÉE : Redirige /upload et /working-papers/request vers /working-papers */}
+          <Route
+            path="/upload"
+            element={<Navigate to="/working-papers" replace />}
+          />
+          <Route
+            path="/working-papers/request"
+            element={<Navigate to="/working-papers" replace />}
+          />
+
           <Route path="/stock" element={<StockPage />} />
           <Route path="/fixed-assets" element={<FixedAssetsPage />} />
           <Route path="/search" element={<SearchPage />} />
           <Route path="/leave" element={<LeavePage />} />
+
+          {/* ✅ NOUVELLE LIGNE AJOUTÉE : Redirige l'ancien lien cassé vers la bonne page */}
+          <Route
+            path="/leave/request"
+            element={<Navigate to="/leave" replace />}
+          />
+
           <Route path="/team" element={<TeamPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />

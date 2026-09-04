@@ -4,17 +4,28 @@ import {
   PackagePlus,
   CalendarDays,
   Upload,
+  FileText, // Added for "Note de frais ouvertes"
+  Receipt, // Added for "Nouvelle note de frais"
+  UserPlus, // Added for "Nouveau collaborateur"
+  FilePlus, // Added for "Nouvelle facture"
+  AlertTriangle, // Added for "Constats ouverts"
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "../../lib/utils";
 import { QUICK_ACTIONS } from "../../lib/constants";
 
+// Updated icon map with all required icons
 const iconMap: Record<string, React.FC<{ className?: string }>> = {
   Target,
   Search,
   PackagePlus,
   CalendarDays,
   Upload,
+  FileText,
+  Receipt,
+  UserPlus,
+  FilePlus,
+  AlertTriangle,
 };
 
 const colorClasses: Record<

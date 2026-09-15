@@ -3,9 +3,18 @@ import React, { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import styled from "styled-components";
 import { supabase } from "../../lib/supabase";
-import { format, differenceInYears } from "date-fns";
+import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { useAuth } from "../../contexts/AuthContext";
+
+// ==================== HELPER: SANITIZE FILENAME ====================
+const sanitizeFilename = (name: string) => {
+  return name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9.-]/g, "_")
+    .replace(/_+/g, "_");
+};
 
 // ==================== STYLES ====================
 const Container = styled.div`
@@ -176,26 +185,6 @@ const Button = styled.button<{
   }
 `;
 
-const List = styled.ul`
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  li {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 0;
-    border-bottom: 1px solid #1e293b;
-    .info {
-      flex: 1;
-    }
-    .actions {
-      display: flex;
-      gap: 4px;
-    }
-  }
-`;
-
 const ScoreGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
@@ -225,7 +214,170 @@ const LoadingContainer = styled.div`
   color: #94a3b8;
 `;
 
-// ==================== COMPOSANT ====================
+// ==================== DOSSIER STYLES ====================
+const Accordion = styled.div`
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  overflow: hidden;
+`;
+
+const AccordionHeader = styled.button<{
+  $open: boolean;
+  $confidential?: boolean;
+}>`
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: ${({ $open }) => ($open ? "#1e293b" : "transparent")};
+  border: none;
+  color: #e2e8f0;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  transition: background 0.15s;
+
+  &:hover {
+    background: #1e293b;
+  }
+
+  .left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    i {
+      color: #4facfe;
+      width: 16px;
+    }
+  }
+
+  .badge {
+    font-size: 10px;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 8px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+  }
+  .badge.conf {
+    background: #fef3c7;
+    color: #92400e;
+  }
+  .badge.vconf {
+    background: #fee2e2;
+    color: #991b1b;
+  }
+
+  .right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #94a3b8;
+    font-size: 12px;
+    font-weight: 400;
+  }
+`;
+
+const AccordionContent = styled.div<{ $open: boolean }>`
+  display: ${({ $open }) => ($open ? "block" : "none")};
+  padding: 8px 16px 16px;
+  border-top: 1px solid #334155;
+`;
+
+const CheckItem = styled.div<{ $checked: boolean }>`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  margin-bottom: 4px;
+  background: ${({ $checked }) =>
+    $checked ? "rgba(34,197,94,0.08)" : "transparent"};
+  transition: background 0.15s;
+
+  &:hover {
+    background: ${({ $checked }) =>
+      $checked ? "rgba(34,197,94,0.12)" : "#1e293b"};
+  }
+
+  input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: #22c55e;
+    flex-shrink: 0;
+  }
+
+  .label {
+    flex: 1;
+    font-size: 13px;
+    color: ${({ $checked }) => ($checked ? "#22c55e" : "#e2e8f0")};
+    text-decoration: ${({ $checked }) => ($checked ? "line-through" : "none")};
+  }
+
+  .actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .link-icon {
+    color: #4facfe;
+    text-decoration: none;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+
+  .upload-btn {
+    padding: 4px 8px;
+    background: #334155;
+    color: #e2e8f0;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
+    &:hover {
+      background: #475569;
+    }
+  }
+
+  .del-btn {
+    padding: 4px 6px;
+    background: transparent;
+    color: #dc2626;
+    border: none;
+    cursor: pointer;
+    font-size: 12px;
+    &:hover {
+      color: #b91c1c;
+    }
+  }
+`;
+
+const ProgressBar = styled.div`
+  height: 6px;
+  background: #1e293b;
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 8px;
+  .fill {
+    height: 100%;
+    background: linear-gradient(90deg, #4facfe, #22c55e);
+    transition: width 0.3s;
+  }
+`;
+
+// ==================== TYPES ====================
 interface Collaborateur {
   id: string;
   nom: string;
@@ -239,22 +391,6 @@ interface Collaborateur {
   bureau: string;
   date_embauche: string;
   date_depart: string;
-  cv_url: string;
-  cni_url: string;
-}
-
-interface Formation {
-  id: string;
-  titre: string;
-  etablissement: string;
-  date_obtention: string;
-}
-
-interface Discipline {
-  id: string;
-  date: string;
-  description: string;
-  document_url: string;
 }
 
 interface Score {
@@ -264,6 +400,110 @@ interface Score {
   score_annuel: number;
 }
 
+interface DossierItem {
+  item_key: string;
+  checked: boolean;
+  document_url?: string | null;
+}
+
+// ==================== DOSSIER STRUCTURE ====================
+const DOSSIER_STRUCTURE = [
+  {
+    id: "identification",
+    title: "Identification et entrée",
+    icon: "fa-id-card",
+    items: [
+      { key: "cv_lm", label: "CV / lettre de motivation" },
+      { key: "piece_identite", label: "Pièce d'identité" },
+      { key: "diplomes_certificats", label: "Diplômes et certificats" },
+      { key: "rib", label: "RIB" },
+      { key: "cnps", label: "Déclaration CNPS" },
+      { key: "contrat_initial", label: "Contrat de travail initial" },
+      { key: "changements_contrat", label: "Changements au contrat" },
+    ],
+  },
+  {
+    id: "carriere",
+    title: "Carrière et rémunération",
+    icon: "fa-chart-line",
+    items: [
+      {
+        key: "fiches_poste",
+        label: "Fiches de poste (successives, du plus ancien au plus récent)",
+      },
+      {
+        key: "arretes_nomination",
+        label: "Arrêtés / décisions de nomination ou titularisation",
+      },
+      {
+        key: "avenants_salaire",
+        label: "Avenants de changement de coefficient / salaire",
+      },
+      {
+        key: "evaluations_pro",
+        label: "Évaluations / entretiens professionnels",
+      },
+      { key: "promotions", label: "Promotions / changements de fonction" },
+    ],
+  },
+  {
+    id: "formation",
+    title: "Formation",
+    icon: "fa-graduation-cap",
+    items: [
+      {
+        key: "attestations_stages",
+        label: "Attestations de stages / formations suivies",
+      },
+      { key: "diplomes_emploi", label: "Diplômes obtenus en cours d'emploi" },
+      { key: "bilans_competences", label: "Bilans de compétences" },
+    ],
+  },
+  {
+    id: "discipline",
+    title: "Discipline",
+    icon: "fa-gavel",
+    confidential: true,
+    items: [
+      { key: "avertissements", label: "Avertissements / blâmes" },
+      {
+        key: "decisions_disciplinaires",
+        label: "Décisions disciplinaires (mise à pied, etc.)",
+      },
+    ],
+  },
+  {
+    id: "medical",
+    title: "Médical",
+    icon: "fa-heartbeat",
+    confidential: true,
+    veryConfidential: true,
+    items: [
+      { key: "visites_medicales", label: "Visites médicales obligatoires" },
+      {
+        key: "accidents_travail",
+        label: "Déclarations d'accident du travail / maladie professionnelle",
+      },
+      { key: "examens_complementaires", label: "Examens complémentaires" },
+      { key: "suivi_sante", label: "Suivi santé (médecine du travail)" },
+    ],
+  },
+  {
+    id: "paie",
+    title: "Paie",
+    icon: "fa-money-bill-wave",
+    items: [
+      {
+        key: "bulletins_paie",
+        label: "Bulletins de paie mensuels (du premier au dernier)",
+      },
+      { key: "certificat_travail", label: "Certificat de travail (copie)" },
+      { key: "solde_tout_compte", label: "Solde de tout compte (copie)" },
+    ],
+  },
+];
+
+// ==================== COMPOSANT ====================
 const CollaborateurFiche: React.FC = () => {
   const { user } = useAuth();
   const { id } = useParams<{ id: string }>();
@@ -273,40 +513,30 @@ const CollaborateurFiche: React.FC = () => {
   const [collaborateur, setCollaborateur] = useState<Partial<Collaborateur>>(
     {},
   );
-  const [formations, setFormations] = useState<Formation[]>([]);
-  const [disciplines, setDisciplines] = useState<Discipline[]>([]);
   const [scores, setScores] = useState<Score[]>([]);
+  const [dossier, setDossier] = useState<Record<string, DossierItem>>({});
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [age, setAge] = useState<number | null>(null);
-
-  // Nouvelle formation
-  const [newFormation, setNewFormation] = useState({
-    titre: "",
-    etablissement: "",
-    date_obtention: "",
-  });
-  // Nouvelle discipline
-  const [newDiscipline, setNewDiscipline] = useState({
-    date: "",
-    description: "",
-    document_url: "",
-  });
+  const [openAccordions, setOpenAccordions] = useState<Record<string, boolean>>(
+    {
+      identification: true,
+    },
+  );
 
   const photoInputRef = useRef<HTMLInputElement>(null);
-  const cvInputRef = useRef<HTMLInputElement>(null);
-  const cniInputRef = useRef<HTMLInputElement>(null);
 
+  // ============ LOAD DATA ============
   const loadData = async () => {
     if (!user) {
       setLoading(false);
       return;
     }
-
     if (isNew) return;
+
     try {
       setLoading(true);
+
       const { data: collab, error } = await supabase
         .from("collaborateurs")
         .select("*")
@@ -315,35 +545,28 @@ const CollaborateurFiche: React.FC = () => {
       if (error) throw error;
       setCollaborateur(collab);
 
-      if (collab.date_naissance) {
-        const age = differenceInYears(
-          new Date(),
-          new Date(collab.date_naissance),
-        );
-        setAge(age);
-      }
-
-      const { data: f, error: fErr } = await supabase
-        .from("formations")
-        .select("*")
-        .eq("collaborateur_id", id)
-        .order("date_obtention", { ascending: false });
-      if (!fErr) setFormations(f || []);
-
-      const { data: d, error: dErr } = await supabase
-        .from("disciplines")
-        .select("*")
-        .eq("collaborateur_id", id)
-        .order("date", { ascending: false });
-      if (!dErr) setDisciplines(d || []);
-
-      const { data: s, error: sErr } = await supabase
+      const { data: s } = await supabase
         .from("scores")
         .select("*")
         .eq("collaborateur_id", id)
         .order("mois", { ascending: false })
         .limit(1);
-      if (!sErr && s && s.length > 0) setScores(s);
+      if (s && s.length > 0) setScores(s);
+
+      const { data: dossierData } = await supabase
+        .from("dossier_collaborateur")
+        .select("item_key, checked, document_url")
+        .eq("collaborateur_id", id);
+
+      const dossierMap: Record<string, DossierItem> = {};
+      (dossierData || []).forEach((item: any) => {
+        dossierMap[item.item_key] = {
+          item_key: item.item_key,
+          checked: item.checked,
+          document_url: item.document_url,
+        };
+      });
+      setDossier(dossierMap);
     } catch (err) {
       console.error(err);
       alert("Erreur chargement du collaborateur");
@@ -356,29 +579,17 @@ const CollaborateurFiche: React.FC = () => {
     loadData();
   }, [id, user]);
 
-  useEffect(() => {
-    if (collaborateur.date_naissance) {
-      const age = differenceInYears(
-        new Date(),
-        new Date(collaborateur.date_naissance),
-      );
-      setAge(age);
-    } else {
-      setAge(null);
-    }
-  }, [collaborateur.date_naissance]);
-
+  // ============ BASIC HANDLERS ============
   const handleChange = (field: keyof Collaborateur, value: any) => {
     setCollaborateur({ ...collaborateur, [field]: value });
   };
 
-  const handleUpload = async (
-    field: "photo_url" | "cv_url" | "cni_url",
-    file: File,
-  ) => {
+  const handleUpload = async (field: "photo_url", file: File) => {
     try {
       const fileExt = file.name.split(".").pop();
-      const fileName = `${Date.now()}_${field}.${fileExt}`;
+      const baseName = file.name.substring(0, file.name.lastIndexOf("."));
+      const cleanName = sanitizeFilename(baseName);
+      const fileName = `${Date.now()}_${field}_${cleanName}.${fileExt}`;
       const filePath = `collaborateurs/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
@@ -391,19 +602,134 @@ const CollaborateurFiche: React.FC = () => {
         .getPublicUrl(filePath);
 
       handleChange(field, urlData.publicUrl);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert("Erreur lors de l'upload du fichier");
+      alert(`Erreur upload : ${err.message || "Erreur inconnue"}`);
     }
   };
 
+  // ============ DOSSIER HANDLERS ============
+  const toggleDossierItem = async (itemKey: string) => {
+    if (isNew) {
+      alert(
+        "Veuillez d'abord enregistrer le collaborateur avant de gérer son dossier.",
+      );
+      return;
+    }
+
+    const current = dossier[itemKey] || { item_key: itemKey, checked: false };
+    const newChecked = !current.checked;
+
+    setDossier({
+      ...dossier,
+      [itemKey]: { ...current, checked: newChecked },
+    });
+
+    try {
+      const { error } = await supabase.from("dossier_collaborateur").upsert(
+        {
+          collaborateur_id: id,
+          item_key: itemKey,
+          checked: newChecked,
+          document_url: current.document_url || null,
+        },
+        { onConflict: "collaborateur_id,item_key" },
+      );
+
+      if (error) throw error;
+    } catch (err: any) {
+      console.error("Détails complets :", err);
+      setDossier({ ...dossier, [itemKey]: current });
+      alert(
+        `Erreur dossier :\n${err.message || "Inconnu"}\n${err.details || ""}`,
+      );
+    }
+  };
+
+  const handleDossierUpload = async (itemKey: string, file: File) => {
+    if (isNew) {
+      alert("Veuillez d'abord enregistrer le collaborateur.");
+      return;
+    }
+
+    try {
+      const fileExt = file.name.split(".").pop();
+      const baseName = file.name.substring(0, file.name.lastIndexOf("."));
+      const cleanName = sanitizeFilename(baseName);
+      const fileName = `${id}_${itemKey}_${Date.now()}_${cleanName}.${fileExt}`;
+      const filePath = `dossiers/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("documents")
+        .upload(filePath, file);
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from("documents")
+        .getPublicUrl(filePath);
+
+      const { error: dbError } = await supabase
+        .from("dossier_collaborateur")
+        .upsert(
+          {
+            collaborateur_id: id,
+            item_key: itemKey,
+            checked: true,
+            document_url: urlData.publicUrl,
+          },
+          { onConflict: "collaborateur_id,item_key" },
+        );
+
+      if (dbError) throw dbError;
+
+      setDossier({
+        ...dossier,
+        [itemKey]: {
+          item_key: itemKey,
+          checked: true,
+          document_url: urlData.publicUrl,
+        },
+      });
+
+      alert("Document uploadé avec succès !");
+    } catch (err: any) {
+      console.error("Détails de l'erreur :", err);
+      alert(
+        `Erreur d'upload : ${err.message || err.details || "Erreur inconnue"}`,
+      );
+    }
+  };
+
+  const deleteDossierDocument = async (itemKey: string) => {
+    if (!window.confirm("Supprimer ce document ?")) return;
+    try {
+      await supabase.from("dossier_collaborateur").upsert(
+        {
+          collaborateur_id: id,
+          item_key: itemKey,
+          checked: false,
+          document_url: null,
+        },
+        { onConflict: "collaborateur_id,item_key" },
+      );
+
+      setDossier({
+        ...dossier,
+        [itemKey]: { item_key: itemKey, checked: false, document_url: null },
+      });
+    } catch (err) {
+      console.error(err);
+      alert("Erreur suppression");
+    }
+  };
+
+  // ============ SAVE COLLABORATEUR ============
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!collaborateur.nom || !collaborateur.prenom) {
       alert("Veuillez renseigner au moins le nom et le prénom.");
       return;
     }
-    // Vérifier que la date d'embauche est renseignée
     if (!collaborateur.date_embauche) {
       alert("Veuillez renseigner la date d'embauche.");
       return;
@@ -413,7 +739,6 @@ const CollaborateurFiche: React.FC = () => {
       setSaving(true);
       const dataToSave = { ...collaborateur };
 
-      let savedId = id;
       if (isNew) {
         const { data, error } = await supabase
           .from("collaborateurs")
@@ -421,7 +746,6 @@ const CollaborateurFiche: React.FC = () => {
           .select()
           .single();
         if (error) throw error;
-        savedId = data.id;
         navigate(`/collaborateurs/${data.id}`);
       } else {
         const { error } = await supabase
@@ -431,7 +755,6 @@ const CollaborateurFiche: React.FC = () => {
         if (error) throw error;
       }
 
-      // Mettre à jour la table profiles avec la date d'embauche pour l'utilisateur courant
       if (user && dataToSave.date_embauche) {
         await supabase
           .from("profiles")
@@ -449,71 +772,14 @@ const CollaborateurFiche: React.FC = () => {
     }
   };
 
-  const addFormation = async () => {
-    if (!newFormation.titre || !id) return;
-    try {
-      const { data, error } = await supabase
-        .from("formations")
-        .insert([
-          {
-            collaborateur_id: id,
-            titre: newFormation.titre,
-            etablissement: newFormation.etablissement,
-            date_obtention: newFormation.date_obtention || null,
-          },
-        ])
-        .select()
-        .single();
-      if (error) throw error;
-      setFormations([data, ...formations]);
-      setNewFormation({ titre: "", etablissement: "", date_obtention: "" });
-    } catch (err) {
-      alert("Erreur ajout formation");
-    }
-  };
-
-  const deleteFormation = async (formationId: string) => {
-    if (!window.confirm("Supprimer cette formation ?")) return;
-    try {
-      await supabase.from("formations").delete().eq("id", formationId);
-      setFormations(formations.filter((f) => f.id !== formationId));
-    } catch (err) {
-      alert("Erreur suppression");
-    }
-  };
-
-  const addDiscipline = async () => {
-    if (!newDiscipline.description || !id) return;
-    try {
-      const { data, error } = await supabase
-        .from("disciplines")
-        .insert([
-          {
-            collaborateur_id: id,
-            date: newDiscipline.date || new Date().toISOString().split("T")[0],
-            description: newDiscipline.description,
-            document_url: newDiscipline.document_url || null,
-          },
-        ])
-        .select()
-        .single();
-      if (error) throw error;
-      setDisciplines([data, ...disciplines]);
-      setNewDiscipline({ date: "", description: "", document_url: "" });
-    } catch (err) {
-      alert("Erreur ajout discipline");
-    }
-  };
-
-  const deleteDiscipline = async (disciplineId: string) => {
-    if (!window.confirm("Supprimer cette sanction ?")) return;
-    try {
-      await supabase.from("disciplines").delete().eq("id", disciplineId);
-      setDisciplines(disciplines.filter((d) => d.id !== disciplineId));
-    } catch (err) {
-      alert("Erreur suppression");
-    }
-  };
+  // ============ PROGRESS CALC ============
+  const totalItems = DOSSIER_STRUCTURE.reduce(
+    (sum, cat) => sum + cat.items.length,
+    0,
+  );
+  const checkedItems = Object.values(dossier).filter((d) => d.checked).length;
+  const progressPercent =
+    totalItems > 0 ? (checkedItems / totalItems) * 100 : 0;
 
   if (loading) {
     return (
@@ -546,7 +812,7 @@ const CollaborateurFiche: React.FC = () => {
       </Header>
 
       <form onSubmit={handleSubmit}>
-        {/* ===== SECTION PERSONNELLE ===== */}
+        {/* ===== PERSONNELLE ===== */}
         <Section>
           <SectionTitle>
             <i className="fas fa-id-card"></i> Informations personnelles
@@ -614,10 +880,6 @@ const CollaborateurFiche: React.FC = () => {
               />
             </Field>
             <Field>
-              <label>Âge</label>
-              <input value={age !== null ? `${age} ans` : ""} disabled />
-            </Field>
-            <Field>
               <label>Lieu de naissance</label>
               <input
                 value={collaborateur.lieu_naissance || ""}
@@ -638,7 +900,7 @@ const CollaborateurFiche: React.FC = () => {
           </Grid>
         </Section>
 
-        {/* ===== SECTION PROFESSIONNELLE ===== */}
+        {/* ===== PROFESSIONNELLE ===== */}
         <Section>
           <SectionTitle>
             <i className="fas fa-briefcase"></i> Informations professionnelles
@@ -685,333 +947,158 @@ const CollaborateurFiche: React.FC = () => {
           </Grid>
         </Section>
 
-        {/* ===== SECTION DOCUMENTS ===== */}
+        {/* ===== DOSSIER DU COLLABORATEUR ===== */}
         <Section>
           <SectionTitle>
-            <i className="fas fa-paperclip"></i> Documents
+            <i className="fas fa-folder-open"></i> Dossier du collaborateur
           </SectionTitle>
-          <Grid>
-            <Field>
-              <label>CV</label>
-              <div
-                style={{ display: "flex", gap: "8px", alignItems: "center" }}
-              >
-                {collaborateur.cv_url ? (
-                  <>
-                    <a
-                      href={collaborateur.cv_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ color: "#4facfe" }}
-                    >
-                      <i className="fas fa-file-pdf"></i> Voir le CV
-                    </a>
-                    <Button
-                      variant="danger"
-                      type="button"
-                      onClick={() => handleChange("cv_url", "")}
-                    >
-                      Supprimer
-                    </Button>
-                  </>
-                ) : (
-                  <UploadButton
-                    type="button"
-                    onClick={() => cvInputRef.current?.click()}
-                  >
-                    <i className="fas fa-upload"></i> Importer
-                  </UploadButton>
-                )}
-                <FileInput
-                  ref={cvInputRef}
-                  type="file"
-                  accept=".pdf,.doc,.docx"
-                  onChange={(e) => {
-                    if (e.target.files?.[0])
-                      handleUpload("cv_url", e.target.files[0]);
-                  }}
-                />
-              </div>
-            </Field>
-            <Field>
-              <label>CNI</label>
-              <div
-                style={{ display: "flex", gap: "8px", alignItems: "center" }}
-              >
-                {collaborateur.cni_url ? (
-                  <>
-                    <a
-                      href={collaborateur.cni_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ color: "#4facfe" }}
-                    >
-                      <i className="fas fa-file-pdf"></i> Voir la CNI
-                    </a>
-                    <Button
-                      variant="danger"
-                      type="button"
-                      onClick={() => handleChange("cni_url", "")}
-                    >
-                      Supprimer
-                    </Button>
-                  </>
-                ) : (
-                  <UploadButton
-                    type="button"
-                    onClick={() => cniInputRef.current?.click()}
-                  >
-                    <i className="fas fa-upload"></i> Importer
-                  </UploadButton>
-                )}
-                <FileInput
-                  ref={cniInputRef}
-                  type="file"
-                  accept=".pdf,.jpg,.png"
-                  onChange={(e) => {
-                    if (e.target.files?.[0])
-                      handleUpload("cni_url", e.target.files[0]);
-                  }}
-                />
-              </div>
-            </Field>
-          </Grid>
-        </Section>
 
-        {/* ===== FORMATIONS ===== */}
-        <Section>
-          <SectionTitle>
-            <i className="fas fa-graduation-cap"></i> Formations et diplômes
-          </SectionTitle>
-          <div
-            style={{
-              display: "flex",
-              gap: "8px",
-              flexWrap: "wrap",
-              marginBottom: "12px",
-            }}
-          >
-            <input
-              placeholder="Titre"
-              value={newFormation.titre}
-              onChange={(e) =>
-                setNewFormation({ ...newFormation, titre: e.target.value })
-              }
+          <div style={{ marginBottom: "16px" }}>
+            <div
               style={{
-                padding: "6px 10px",
-                border: "1px solid #334155",
-                borderRadius: "4px",
-                background: "#0f172a",
-                color: "#e2e8f0",
-                flex: 1,
+                display: "flex",
+                justifyContent: "space-between",
+                fontSize: "12px",
+                color: "#94a3b8",
+                marginBottom: "4px",
               }}
-            />
-            <input
-              placeholder="Établissement"
-              value={newFormation.etablissement}
-              onChange={(e) =>
-                setNewFormation({
-                  ...newFormation,
-                  etablissement: e.target.value,
-                })
-              }
-              style={{
-                padding: "6px 10px",
-                border: "1px solid #334155",
-                borderRadius: "4px",
-                background: "#0f172a",
-                color: "#e2e8f0",
-                flex: 1,
-              }}
-            />
-            <input
-              type="date"
-              value={newFormation.date_obtention}
-              onChange={(e) =>
-                setNewFormation({
-                  ...newFormation,
-                  date_obtention: e.target.value,
-                })
-              }
-              style={{
-                padding: "6px 10px",
-                border: "1px solid #334155",
-                borderRadius: "4px",
-                background: "#0f172a",
-                color: "#e2e8f0",
-              }}
-            />
-            <Button variant="success" type="button" onClick={addFormation}>
-              <i className="fas fa-plus"></i> Ajouter
-            </Button>
+            >
+              <span>Complétude du dossier</span>
+              <span>
+                {checkedItems} / {totalItems} ({Math.round(progressPercent)}%)
+              </span>
+            </div>
+            <ProgressBar>
+              <div className="fill" style={{ width: `${progressPercent}%` }} />
+            </ProgressBar>
           </div>
-          <List>
-            {formations.map((f) => (
-              <li key={f.id}>
-                <span className="info">
-                  <strong>{f.titre}</strong> – {f.etablissement}{" "}
-                  {f.date_obtention &&
-                    `(${format(new Date(f.date_obtention), "dd/MM/yyyy")})`}
-                </span>
-                <Button
-                  variant="danger"
-                  type="button"
-                  onClick={() => deleteFormation(f.id)}
-                >
-                  <i className="fas fa-trash"></i>
-                </Button>
-              </li>
-            ))}
-            {formations.length === 0 && (
-              <li
-                style={{
-                  color: "#94a3b8",
-                  textAlign: "center",
-                  padding: "12px",
-                }}
-              >
-                Aucune formation enregistrée
-              </li>
-            )}
-          </List>
-        </Section>
 
-        {/* ===== DISCIPLINE ===== */}
-        <Section>
-          <SectionTitle>
-            <i className="fas fa-gavel"></i> Discipline (sanctions)
-          </SectionTitle>
-          <div
-            style={{
-              display: "flex",
-              gap: "8px",
-              flexWrap: "wrap",
-              marginBottom: "12px",
-            }}
-          >
-            <input
-              type="date"
-              value={newDiscipline.date}
-              onChange={(e) =>
-                setNewDiscipline({ ...newDiscipline, date: e.target.value })
-              }
+          {isNew && (
+            <div
               style={{
-                padding: "6px 10px",
-                border: "1px solid #334155",
-                borderRadius: "4px",
-                background: "#0f172a",
-                color: "#e2e8f0",
-              }}
-            />
-            <input
-              placeholder="Description"
-              value={newDiscipline.description}
-              onChange={(e) =>
-                setNewDiscipline({
-                  ...newDiscipline,
-                  description: e.target.value,
-                })
-              }
-              style={{
-                padding: "6px 10px",
-                border: "1px solid #334155",
-                borderRadius: "4px",
-                background: "#0f172a",
-                color: "#e2e8f0",
-                flex: 2,
-              }}
-            />
-            <input
-              placeholder="Lien pièce jointe (optionnel)"
-              value={newDiscipline.document_url}
-              onChange={(e) =>
-                setNewDiscipline({
-                  ...newDiscipline,
-                  document_url: e.target.value,
-                })
-              }
-              style={{
-                padding: "6px 10px",
-                border: "1px solid #334155",
-                borderRadius: "4px",
-                background: "#0f172a",
-                color: "#e2e8f0",
-                flex: 1,
-              }}
-            />
-            <Button variant="success" type="button" onClick={addDiscipline}>
-              <i className="fas fa-plus"></i> Ajouter
-            </Button>
-          </div>
-          <List>
-            {disciplines.map((d) => (
-              <li key={d.id}>
-                <span className="info">
-                  <strong>{format(new Date(d.date), "dd/MM/yyyy")}</strong> –{" "}
-                  {d.description}
-                  {d.document_url && (
-                    <a
-                      href={d.document_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ marginLeft: "8px", color: "#4facfe" }}
-                    >
-                      <i className="fas fa-paperclip"></i>
-                    </a>
-                  )}
-                </span>
-                <Button
-                  variant="danger"
-                  type="button"
-                  onClick={() => deleteDiscipline(d.id)}
-                >
-                  <i className="fas fa-trash"></i>
-                </Button>
-              </li>
-            ))}
-            {disciplines.length === 0 && (
-              <li
-                style={{
-                  color: "#94a3b8",
-                  textAlign: "center",
-                  padding: "12px",
-                }}
-              >
-                Aucune sanction enregistrée
-              </li>
-            )}
-          </List>
-        </Section>
-
-        {/* ===== ÉVALUATIONS (placeholder) ===== */}
-        <Section>
-          <SectionTitle>
-            <i className="fas fa-chart-line"></i> Évaluations
-          </SectionTitle>
-          <div
-            style={{
-              color: "#94a3b8",
-              textAlign: "center",
-              padding: "20px",
-              background: "#0f172a",
-              borderRadius: "8px",
-            }}
-          >
-            <i
-              className="fas fa-code"
-              style={{
-                fontSize: "32px",
-                display: "block",
+                padding: "12px",
+                background: "rgba(251,191,36,0.1)",
+                border: "1px solid #fbbf24",
+                borderRadius: "6px",
+                fontSize: "13px",
+                color: "#fbbf24",
                 marginBottom: "12px",
-                color: "#475569",
               }}
-            ></i>
-            <p>Module d'évaluations interne à venir</p>
-            <p style={{ fontSize: "13px", marginTop: "4px" }}>
-              Cette section permettra de gérer les évaluations périodiques des
-              collaborateurs.
-            </p>
-          </div>
+            >
+              <i className="fas fa-info-circle"></i> Enregistrez d'abord le
+              collaborateur pour gérer son dossier.
+            </div>
+          )}
+
+          {DOSSIER_STRUCTURE.map((cat) => {
+            const catChecked = cat.items.filter(
+              (i) => dossier[i.key]?.checked,
+            ).length;
+            const isOpen = openAccordions[cat.id];
+
+            return (
+              <Accordion key={cat.id}>
+                <AccordionHeader
+                  $open={!!isOpen}
+                  $confidential={cat.confidential}
+                  type="button"
+                  onClick={() =>
+                    setOpenAccordions({
+                      ...openAccordions,
+                      [cat.id]: !isOpen,
+                    })
+                  }
+                >
+                  <div className="left">
+                    <i className={`fas ${cat.icon}`}></i>
+                    {cat.title}
+                    {cat.veryConfidential && (
+                      <span className="badge vconf">Très confidentiel</span>
+                    )}
+                    {!cat.veryConfidential && cat.confidential && (
+                      <span className="badge conf">Confidentiel</span>
+                    )}
+                  </div>
+                  <div className="right">
+                    <span>
+                      {catChecked} / {cat.items.length}
+                    </span>
+                    <i
+                      className={`fas fa-chevron-${isOpen ? "up" : "down"}`}
+                    ></i>
+                  </div>
+                </AccordionHeader>
+
+                <AccordionContent $open={!!isOpen}>
+                  {cat.items.map((item) => {
+                    const itemState = dossier[item.key] || {
+                      checked: false,
+                      document_url: null,
+                    };
+                    const fileInputId = `file_${item.key}`;
+
+                    return (
+                      <CheckItem key={item.key} $checked={itemState.checked}>
+                        <input
+                          type="checkbox"
+                          checked={itemState.checked}
+                          onChange={() => toggleDossierItem(item.key)}
+                        />
+                        <span className="label">{item.label}</span>
+                        <div className="actions">
+                          {itemState.document_url ? (
+                            <>
+                              <a
+                                href={itemState.document_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="link-icon"
+                              >
+                                <i className="fas fa-paperclip"></i> Voir
+                              </a>
+                              <button
+                                type="button"
+                                className="del-btn"
+                                onClick={() => deleteDossierDocument(item.key)}
+                                title="Supprimer"
+                              >
+                                <i className="fas fa-trash"></i>
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <input
+                                type="file"
+                                id={fileInputId}
+                                style={{ display: "none" }}
+                                onChange={(e) => {
+                                  if (e.target.files?.[0])
+                                    handleDossierUpload(
+                                      item.key,
+                                      e.target.files[0],
+                                    );
+                                }}
+                              />
+                              <button
+                                type="button"
+                                className="upload-btn"
+                                onClick={() =>
+                                  document.getElementById(fileInputId)?.click()
+                                }
+                                disabled={isNew}
+                              >
+                                <i className="fas fa-upload"></i> Joindre
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </CheckItem>
+                    );
+                  })}
+                </AccordionContent>
+              </Accordion>
+            );
+          })}
         </Section>
 
         {/* ===== SCORES ===== */}

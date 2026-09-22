@@ -211,6 +211,22 @@ export const USER_ROLE_LABELS: Record<string, string> = {
   asset_manager: 'Gestionnaire Actifs',
   finance_officer: 'Responsable Finance',
   read_only: 'Lecture seule',
+  assistant_administratif: 'Assistant Administratif',
+  rh: 'RH (Ressources Humaines)',
+  responsable_controle_interne: 'Responsable Contrôle Interne et Conformité',
+  responsable_admin_fin: 'Responsable Administratif et Financier',
+  associe_gerant: 'Associé Gérant',
+  directeur_bureau: 'Directeur du Bureau',
+  manageur: 'Manager',
+  chef_mission: 'Chef de Mission',
+  superviseur: 'Superviseur',
+  senior_audit: 'Senior Audit',
+  senior_expertise: 'Senior Expertise',
+  junior_audit: 'Junior Audit',
+  junior_expertise: 'Junior Expertise',
+  stagiaires: 'Stagiaires',
+  formateur_senior: 'Formateur Senior',
+  formateur_junior: 'Formateur Junior',
 };
 
 export const ASSET_CATEGORY_LABELS: Record<string, string> = {

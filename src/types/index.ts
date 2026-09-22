@@ -1,4 +1,34 @@
-export type UserRole = 'super_admin' | 'partner' | 'manager' | 'senior_auditor' | 'auditor' | 'hr_officer' | 'stock_manager' | 'asset_manager' | 'finance_officer' | 'read_only';
+// src/types/index.ts
+
+export type UserRole =
+  // Nouveaux rôles de la matrice
+  | 'super_admin'
+  | 'assistant_administratif'
+  | 'rh'
+  | 'responsable_controle_interne'
+  | 'responsable_admin_fin'
+  | 'associe_gerant'
+  | 'directeur_bureau'
+  | 'manageur'
+  | 'chef_mission'
+  | 'superviseur'
+  | 'senior_audit'
+  | 'senior_expertise'
+  | 'junior_audit'
+  | 'junior_expertise'
+  | 'stagiaires'
+  | 'formateur_senior'
+  | 'formateur_junior'
+  // Anciens rôles conservés pour compatibilité
+  | 'partner'
+  | 'manager'
+  | 'senior_auditor'
+  | 'auditor'
+  | 'hr_officer'
+  | 'stock_manager'
+  | 'asset_manager'
+  | 'finance_officer'
+  | 'read_only';
 
 export type EngagementStatus = 'draft' | 'planning' | 'in_progress' | 'review' | 'completed' | 'closed';
 
@@ -12,12 +42,13 @@ export type AssetStatus = 'active' | 'disposed' | 'maintenance';
 export type StockStatus = 'in_stock' | 'low_stock' | 'out_of_stock';
 
 export type DocumentCategory = 'ADMINISTRATIVE' | 'PERMANENT' | 'ANNUAL' | 'FISCAL' | 'SOCIAL' | 'AUDIT';
+
 export interface User {
   [key: string]: unknown;
   id: string;
   email: string;
   full_name: string;
-  role: UserRole;
+  role: UserRole | string;
   avatar_url?: string;
   department?: string;
   phone?: string;
@@ -105,6 +136,7 @@ export interface Finding {
   updated_at: string;
 }
 
+// ✅ WorkingPaper — déclaration UNIQUE (les 2 versions fusionnées)
 export interface WorkingPaper {
   [key: string]: unknown;
   id: string;
@@ -119,6 +151,9 @@ export interface WorkingPaper {
   version: number;
   status: string;
   created_at: string;
+  // Champs optionnels (ancienne version)
+  category?: DocumentCategory;
+  updated_at?: string;
 }
 
 export interface StockItem {
@@ -233,7 +268,6 @@ export interface ColumnDef<T> {
   render?: (value: T[keyof T], row: T) => React.ReactNode;
   width?: string;
 }
-// ... vos types existants
 
 export type WidgetStatus = 'urgent' | 'warning' | 'success' | 'info';
 
@@ -246,7 +280,6 @@ export interface WidgetItem {
   progression?: number;
 }
 
-// Ajoutez ceci à la fin du fichier
 export interface ManuelWidgetData {
   id: string;
   title: string;
@@ -257,16 +290,15 @@ export interface ManuelWidgetData {
   filters: string[];
   progress: number;
 }
-// src/types/index.ts
 
-export type EtablissementType = 
-  | 'siege' 
-  | 'agence' 
-  | 'succursale' 
-  | 'usine' 
-  | 'magasin' 
-  | 'bureau' 
-  | 'entrepot' 
+export type EtablissementType =
+  | 'siege'
+  | 'agence'
+  | 'succursale'
+  | 'usine'
+  | 'magasin'
+  | 'bureau'
+  | 'entrepot'
   | 'autre';
 
 export interface Etablissement {
@@ -305,17 +337,5 @@ export interface EtablissementFormData {
   is_active: boolean;
 }
 
-export interface WorkingPaper {
-  id: string;
-  name: string;
-  category: 'ADMINISTRATIVE' | 'PERMANENT' | 'ANNUAL' | 'FISCAL' | 'SOCIAL' | 'AUDIT';
-  reference: string;
-  status: string;
-  file_type: string;
-  file_size: number;
-  file_path: string;
-  version: number;
-  created_at: string;
-  updated_at?: string;
-  folder?: string; // optionnel si vous gardez l'ancien champ
-}
+// ⚠️ NE PAS redéclarer WorkingPaper ici — il est déjà déclaré plus haut (ligne ~115)
+// La duplication causait les erreurs TS 2687 et 2717.

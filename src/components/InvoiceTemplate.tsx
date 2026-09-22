@@ -435,7 +435,7 @@ export const InvoiceTemplate: React.FC<InvoiceTemplateProps> = ({
           </table>
           <div className="flex justify-end mt-2">
             <div className="w-64">
-              <div className="flex justify-between items-center py-0.5 text-sm font-semibold bg-amber-50 px-3 py-1 rounded border border-amber-200">
+              <div className="flex justify-between items-center text-sm font-semibold bg-amber-50 px-3 py-1 rounded border border-amber-200">
                 <span className="text-black">Total Retenues :</span>
                 <span className="text-black">
                   {formatNumber(retenus_total)} {invoice.currency}

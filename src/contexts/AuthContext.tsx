@@ -1,262 +1,393 @@
 // src/contexts/AuthContext.tsx
 import {
   createContext,
-  useCallback,
   useContext,
   useEffect,
-  useMemo,
   useState,
+  useCallback,
   type ReactNode,
 } from "react";
-import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
 
-// =====================================================
+// ============================================================
 // TYPES
-// =====================================================
-export interface Profile {
+// ============================================================
+export interface AuthUser {
   id: string;
-  first_name: string;
-  last_name: string;
-  initials: string;
-  role:
-    | "admin"
-    | "super_admin"
-    | "user"
-    | "partner"
-    | "manager"
-    | "senior_auditor"
-    | "auditor";
+  email: string;
+  full_name?: string;
+  role?: string | null;
+  department?: string;
+  phone?: string;
+  created_at?: string;
 }
 
-export interface SignUpData {
+interface SignUpParams {
   email: string;
   password: string;
   firstName: string;
   lastName: string;
-  role?: Profile["role"];
 }
 
-interface AuthContextValue {
-  session: Session | null;
-  user: User | null;
-  profile: Profile | null;
+interface AuthContextType {
+  user: AuthUser | null;
+  profile: any | null;
+  session: any | null;
   loading: boolean;
   isDemo: boolean;
   signIn: (
     email: string,
     password: string,
   ) => Promise<{ error: string | null }>;
-  signUp: (data: SignUpData) => Promise<{ error: string | null }>;
+  signUp: (params: SignUpParams) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ error: string | null }>;
-  signInDemo: () => Promise<{ error: string | null }>;
+  signInDemo: () => Promise<void>;
+  exitDemo: () => void;
 }
 
-const AuthContext = createContext<AuthContextValue | null>(null);
+const AuthContext = createContext<AuthContextType>({
+  user: null,
+  profile: null,
+  session: null,
+  loading: true,
+  isDemo: false,
+  signIn: async () => ({ error: "Not implemented" }),
+  signUp: async () => ({ error: "Not implemented" }),
+  signOut: async () => {},
+  resetPassword: async () => ({ error: "Not implemented" }),
+  signInDemo: async () => {},
+  exitDemo: () => {},
+});
 
-const DEMO_EMAIL = import.meta.env.VITE_DEMO_EMAIL ?? "demo@orion.com";
-const DEMO_PASSWORD = import.meta.env.VITE_DEMO_PASSWORD ?? "demo123456";
+// ============================================================
+// STORAGE KEYS
+// ============================================================
+const DEMO_KEY = "orion_demo_mode";
+const USER_ROLE_KEY = "orion_user_role";
 
-// =====================================================
-// UTILITAIRES
-// =====================================================
-function mapAuthError(message: string): string {
-  const lower = message.toLowerCase();
-  if (
-    lower.includes("invalid login credentials") ||
-    lower.includes("invalid credentials")
-  ) {
-    return "invalidCredentials";
+// ============================================================
+// DEMO USER (no role → view-only)
+// ============================================================
+const DEMO_USER: AuthUser = {
+  id: "demo-user",
+  email: "demo@orion.com",
+  full_name: "Utilisateur Démo",
+  role: null,
+  department: "Démo",
+  created_at: new Date().toISOString(),
+};
+
+// ============================================================
+// STORAGE HELPERS
+// ============================================================
+const readDemoFlag = (): boolean => {
+  try {
+    return localStorage.getItem(DEMO_KEY) === "true";
+  } catch {
+    return false;
   }
-  return "generic";
-}
+};
 
-async function upsertProfile(
-  user: User,
-  firstName: string,
-  lastName: string,
-  role: Profile["role"] = "auditor",
-) {
-  const initials = (firstName.charAt(0) + lastName.charAt(0)).toUpperCase();
-  const { error } = await supabase.from("profiles").upsert(
-    {
-      id: user.id,
-      first_name: firstName,
-      last_name: lastName,
-      initials,
-      role,
-    },
-    { onConflict: "id" },
-  );
-  if (error) console.warn("Profile upsert failed:", error.message);
-}
-
-// =====================================================
-// PROVIDER
-// =====================================================
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [isDemo, setIsDemo] = useState(false);
-
-  const fetchProfile = useCallback(async (userId: string) => {
-    const { data } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", userId)
-      .maybeSingle();
-    if (data) setProfile(data as Profile);
-  }, []);
-
-  useEffect(() => {
-    let mounted = true;
-
-    const stopLoading = () => {
-      if (mounted) setLoading(false);
-    };
-
-    const timeout = setTimeout(() => {
-      console.warn("Auth initialization timed out – falling back.");
-      stopLoading();
-    }, 5000); // 5 seconds timeout
-
-    async function initSession() {
-      try {
-        const {
-          data: { session: current },
-        } = await supabase.auth.getSession();
-        if (!mounted) return;
-        setSession(current);
-        setUser(current?.user ?? null);
-        if (current?.user) fetchProfile(current.user.id);
-      } catch (err) {
-        console.error("Auth session init failed:", err);
-      } finally {
-        clearTimeout(timeout);
-        stopLoading();
-      }
+const writeDemoFlag = (value: boolean) => {
+  try {
+    if (value) {
+      localStorage.setItem(DEMO_KEY, "true");
+    } else {
+      localStorage.removeItem(DEMO_KEY);
     }
+  } catch {}
+};
 
-    initSession();
+// ⭐ Sync the user's role to localStorage so supabase.ts / WriteBlocker can detect it
+function syncUserRoleToStorage(role: string | null | undefined) {
+  try {
+    if (role && role !== "null" && role !== "undefined") {
+      localStorage.setItem(USER_ROLE_KEY, role);
+    } else {
+      localStorage.removeItem(USER_ROLE_KEY);
+    }
+  } catch {}
+}
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, current) => {
-      setSession(current);
-      setUser(current?.user ?? null);
-      if (current?.user) {
-        await fetchProfile(current.user.id);
-      } else {
-        setProfile(null);
+// ============================================================
+// PROVIDER
+// ============================================================
+export function AuthProvider({ children }: { children: ReactNode }) {
+  // Initialize state from localStorage
+  const [isDemo, setIsDemo] = useState<boolean>(readDemoFlag);
+  const [user, setUser] = useState<AuthUser | null>(() =>
+    readDemoFlag() ? DEMO_USER : null,
+  );
+  const [profile, setProfile] = useState<any | null>(() =>
+    readDemoFlag() ? DEMO_USER : null,
+  );
+  const [session, setSession] = useState<any | null>(() =>
+    readDemoFlag() ? { user: DEMO_USER } : null,
+  );
+  const [loading, setLoading] = useState(!readDemoFlag());
+
+  // ============================================================
+  // LOAD PROFILE FROM SUPABASE
+  // ============================================================
+  const loadProfile = useCallback(
+    async (userId: string, email: string): Promise<AuthUser> => {
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", userId)
+          .maybeSingle();
+
+        if (error) {
+          console.error("[AuthContext] Erreur chargement profil:", error);
+        }
+
+        return {
+          id: userId,
+          email,
+          full_name: data?.full_name ?? "",
+          role: data?.role ?? null,
+          department: data?.department ?? "",
+          phone: data?.phone ?? "",
+          created_at: data?.created_at,
+        };
+      } catch (err) {
+        console.error("[AuthContext] Exception loadProfile:", err);
+        return { id: userId, email, role: null };
       }
-      if (!current) setIsDemo(false);
-      clearTimeout(timeout);
-      stopLoading();
-    });
-
-    return () => {
-      mounted = false;
-      clearTimeout(timeout);
-      subscription.unsubscribe();
-    };
-  }, [fetchProfile]);
-
-  const signIn = useCallback(async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    if (error) return { error: mapAuthError(error.message) };
-    setIsDemo(false);
-    return { error: null };
-  }, []);
-
-  const signUp = useCallback(
-    async ({ email, password, firstName, lastName, role }: SignUpData) => {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: { first_name: firstName, last_name: lastName, role },
-        },
-      });
-
-      if (error) return { error: mapAuthError(error.message) };
-      if (data.user) {
-        await upsertProfile(data.user, firstName, lastName, role);
-      }
-      setIsDemo(false);
-      return { error: null };
     },
     [],
   );
 
-  const signOut = useCallback(async () => {
-    setIsDemo(false);
-    await supabase.auth.signOut();
-  }, []);
+  // ============================================================
+  // INIT (only runs if NOT in demo mode)
+  // ============================================================
+  useEffect(() => {
+    // If we're in demo mode, skip all Supabase initialization
+    if (readDemoFlag()) {
+      console.log("[AuthContext] Demo mode active — skipping Supabase init");
+      setIsDemo(true);
+      setUser(DEMO_USER);
+      setProfile(DEMO_USER);
+      setSession({ user: DEMO_USER });
+      syncUserRoleToStorage(null);
+      setLoading(false);
+      return;
+    }
 
-  const resetPassword = useCallback(async (email: string) => {
+    let mounted = true;
+
+    const init = async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+
+        if (!mounted) return;
+
+        if (data?.session?.user) {
+          setSession(data.session);
+          const u = data.session.user;
+          const authUser = await loadProfile(u.id, u.email ?? "");
+          if (!mounted) return;
+          setUser(authUser);
+          setProfile(authUser);
+          syncUserRoleToStorage(authUser.role); // ⭐ Sync role
+        } else {
+          setUser(null);
+          setProfile(null);
+          setSession(null);
+          syncUserRoleToStorage(null); // ⭐ Clear role
+        }
+      } catch (err) {
+        console.error("[AuthContext] init error:", err);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    init();
+
+    // Auth listener
+    const { data: sub } = supabase.auth.onAuthStateChange(async (_event, s) => {
+      if (readDemoFlag()) return;
+      if (!mounted) return;
+
+      setSession(s);
+      if (s?.user) {
+        const authUser = await loadProfile(s.user.id, s.user.email ?? "");
+        if (!mounted) return;
+        setUser(authUser);
+        setProfile(authUser);
+        syncUserRoleToStorage(authUser.role); // ⭐ Sync role
+      } else {
+        setUser(null);
+        setProfile(null);
+        syncUserRoleToStorage(null); // ⭐ Clear role
+      }
+    });
+
+    return () => {
+      mounted = false;
+      sub.subscription.unsubscribe();
+    };
+  }, [loadProfile]);
+
+  // ============================================================
+  // SIGN IN
+  // ============================================================
+  const signIn = async (email: string, password: string) => {
+    writeDemoFlag(false);
+    setIsDemo(false);
+    syncUserRoleToStorage(null); // Reset role
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) return { error: error.message };
+
+    if (data.user) {
+      const authUser = await loadProfile(data.user.id, data.user.email ?? "");
+      setUser(authUser);
+      setProfile(authUser);
+      setSession(data.session);
+      syncUserRoleToStorage(authUser.role); // ⭐ Sync role
+    }
+    return { error: null };
+  };
+
+  // ============================================================
+  // SIGN UP (no role → view-only)
+  // ============================================================
+  const signUp = async ({
+    email,
+    password,
+    firstName,
+    lastName,
+  }: SignUpParams) => {
+    writeDemoFlag(false);
+    setIsDemo(false);
+    syncUserRoleToStorage(null); // Reset role
+
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          first_name: firstName,
+          last_name: lastName,
+          full_name: `${firstName} ${lastName}`,
+        },
+      },
+    });
+
+    if (error) return { error: error.message };
+
+    if (data.user) {
+      const fullName = `${firstName} ${lastName}`.trim();
+
+      const { error: profileError } = await supabase.from("profiles").upsert({
+        id: data.user.id,
+        email: data.user.email,
+        full_name: fullName,
+        // role: intentionally omitted → null
+      });
+
+      if (profileError) {
+        console.error("[AuthContext] Erreur création profil:", profileError);
+      }
+
+      const authUser: AuthUser = {
+        id: data.user.id,
+        email: data.user.email ?? "",
+        full_name: fullName,
+        role: null,
+        created_at: new Date().toISOString(),
+      };
+      setUser(authUser);
+      setProfile(authUser);
+      syncUserRoleToStorage(null); // ⭐ No role
+    }
+
+    return { error: null };
+  };
+
+  // ============================================================
+  // SIGN OUT
+  // ============================================================
+  const signOut = async () => {
+    writeDemoFlag(false);
+    setIsDemo(false);
+    setUser(null);
+    setProfile(null);
+    setSession(null);
+    syncUserRoleToStorage(null); // ⭐ Clear role
+
+    try {
+      await supabase.auth.signOut();
+    } catch {}
+  };
+
+  // ============================================================
+  // EXIT DEMO (called from banner)
+  // ============================================================
+  const exitDemo = () => {
+    writeDemoFlag(false);
+    setIsDemo(false);
+    setUser(null);
+    setProfile(null);
+    setSession(null);
+    syncUserRoleToStorage(null); // ⭐ Clear role
+  };
+
+  // ============================================================
+  // RESET PASSWORD
+  // ============================================================
+  const resetPassword = async (email: string) => {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/login`,
     });
-    if (error) return { error: mapAuthError(error.message) };
-    return { error: null };
-  }, []);
+    return { error: error?.message ?? null };
+  };
 
-  const signInDemo = useCallback(async () => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email: DEMO_EMAIL,
-      password: DEMO_PASSWORD,
-    });
+  // ============================================================
+  // SIGN IN DEMO (view-only, writes blocked)
+  // ============================================================
+  const signInDemo = async () => {
+    console.log("[AuthContext] signInDemo() — activating demo mode");
 
-    if (error) {
-      setIsDemo(true);
-      return { error: null };
-    }
+    writeDemoFlag(true);
+    syncUserRoleToStorage(null); // ⭐ Demo = no role
 
-    setIsDemo(false);
-    return { error: null };
-  }, []);
+    setIsDemo(true);
+    setUser(DEMO_USER);
+    setProfile(DEMO_USER);
+    setSession({ user: DEMO_USER });
+    setLoading(false);
+  };
 
-  const value = useMemo(
-    () => ({
-      session,
-      user,
-      profile,
-      loading,
-      isDemo,
-      signIn,
-      signUp,
-      signOut,
-      resetPassword,
-      signInDemo,
-    }),
-    [
-      session,
-      user,
-      profile,
-      loading,
-      isDemo,
-      signIn,
-      signUp,
-      signOut,
-      resetPassword,
-      signInDemo,
-    ],
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        profile,
+        session,
+        loading,
+        isDemo,
+        signIn,
+        signUp,
+        signOut,
+        resetPassword,
+        signInDemo,
+        exitDemo,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
   );
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-// =====================================================
-// HOOK
-// =====================================================
 export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) throw new Error("useAuth must be used within AuthProvider");
-  return context;
+  return useContext(AuthContext);
 }

@@ -231,8 +231,6 @@ export function DashboardPage() {
   }, []);
 
   // ---- Calculs KPI ----
-  // 🔥 Correction : on considère comme actives toutes les missions dont le statut n'est pas un statut final
-  // Liste des statuts finaux à adapter selon votre base (ex: "Terminé", "Annulé", "Clôturé", "Archivé")
   const finalStatuses = ["Terminé", "Annulé", "Clôturé", "Archivé"];
   const activeEngagements = engagements.filter(
     (e) => !finalStatuses.includes(e.status),
@@ -247,7 +245,7 @@ export function DashboardPage() {
   const activeClients = clients.filter((c) => c.status === "active").length;
 
   const inventoryValue = stock.reduce(
-    (s, i) => s + (i.remaining_value || 0),
+    (s, i) => s + (Number(i.remaining_value) || 0),
     0,
   );
 
@@ -259,15 +257,17 @@ export function DashboardPage() {
   const computedVNC = assets
     .filter((a) => (a.status as string) === "Active")
     .reduce((sum, a) => {
-      const purchase = a.purchase_value || 0;
+      // ✅ CORRECTION : cast en Number pour éviter l'erreur TS 2363
+      const purchase = Number(a.purchase_value) || 0;
       if (purchase === 0) return sum;
 
-      const years = a.useful_life_years || 10;
+      // ✅ CORRECTION : support des deux noms de champ + cast en Number
+      const years = Number(a.useful_life_years) || Number(a.useful_life) || 10;
       const annualDep = purchase / years;
 
       let age = 0;
       if (a.acquisition_date) {
-        const acquisitionDate = new Date(a.acquisition_date);
+        const acquisitionDate = new Date(a.acquisition_date as string);
         const now = new Date();
         age = Number(
           Math.max(0, now.getFullYear() - acquisitionDate.getFullYear()),
@@ -285,7 +285,7 @@ export function DashboardPage() {
 
   const fallbackValue = assets
     .filter((a) => (a.status as string) === "Active")
-    .reduce((sum, a) => sum + (a.purchase_value || 0), 0);
+    .reduce((sum, a) => sum + (Number(a.purchase_value) || 0), 0);
 
   const assetValue = computedVNC > 0 ? computedVNC : fallbackValue;
 
@@ -375,14 +375,13 @@ export function DashboardPage() {
   );
 
   // ---- Graphiques ----
-  // ✅ Graphique des missions : utilisation directe de client_name ou subject
   const engagementChart = useMemo(() => {
     if (!engagements || engagements.length === 0) return [];
 
     return engagements
       .map((m) => ({
         name: String(m.client_name || m.subject || "Sans nom"),
-        value: m.progress || 0,
+        value: Number(m.progress) || 0,
       }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 10);

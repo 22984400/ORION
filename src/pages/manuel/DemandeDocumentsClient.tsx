@@ -6,7 +6,6 @@ import { supabase } from "../../lib/supabase";
 import * as XLSX from "xlsx";
 
 // ==================== STYLED COMPONENTS ====================
-// (Reprise des styles des autres outils, légèrement adaptés)
 
 const Container = styled.div`
   background: #0f172a;
@@ -161,11 +160,6 @@ const StyledTable = styled.table`
   }
 `;
 
-const CheckboxCell = styled.td`
-  text-align: center;
-  width: 80px;
-`;
-
 const Checkbox = styled.input`
   width: 18px;
   height: 18px;
@@ -262,7 +256,7 @@ const MetaLabel = styled.label`
   margin-bottom: 4px;
 `;
 
-// ==================== DONNÉES DES LISTES (depuis le fichier Excel) ====================
+// ==================== DONNÉES DES LISTES ====================
 
 const repriseDocuments = [
   {
@@ -603,7 +597,7 @@ const DemandeDocumentsClient: React.FC = () => {
           signature: "",
         });
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
       alert("Erreur annulation : " + err.message);
     } finally {

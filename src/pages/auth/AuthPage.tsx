@@ -1,3 +1,4 @@
+// src/pages/auth/AuthPage.tsx
 import { FormEvent, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Check, Eye, EyeOff, Hexagon } from "lucide-react";
@@ -86,14 +87,12 @@ export function AuthPage() {
     if (!isValidEmail(email)) return t("auth.errors.emailInvalid");
     if (!password) return t("auth.errors.passwordRequired");
     if (password.length < 6) return t("auth.errors.passwordMin");
-
     if (mode === "signup") {
       if (!fullName.trim()) return t("auth.errors.fullNameRequired");
       if (password !== confirmPassword)
         return t("auth.errors.passwordMismatch");
       if (!acceptTerms) return t("auth.errors.termsRequired");
     }
-
     return null;
   }
 
@@ -112,21 +111,15 @@ export function AuthPage() {
     try {
       if (mode === "signin") {
         const result = await signIn(email, password);
-        if (result.error) {
-          setError(resolveError(result.error));
-        } else {
-          navigate("/", { replace: true });
-        }
+        if (result.error) setError(resolveError(result.error));
+        else navigate("/", { replace: true });
       } else {
         const parts = fullName.trim().split(/\s+/);
         const firstName = parts[0] ?? "";
         const lastName = parts.slice(1).join(" ") || firstName;
         const result = await signUp({ email, password, firstName, lastName });
-        if (result.error) {
-          setError(resolveError(result.error));
-        } else {
-          navigate("/", { replace: true });
-        }
+        if (result.error) setError(resolveError(result.error));
+        else navigate("/", { replace: true });
       }
     } finally {
       setLoading(false);
@@ -136,7 +129,6 @@ export function AuthPage() {
   async function handleForgotPassword() {
     setError(null);
     setSuccess(null);
-
     if (!email.trim()) {
       setError(t("auth.errors.emailRequired"));
       return;
@@ -145,15 +137,11 @@ export function AuthPage() {
       setError(t("auth.errors.emailInvalid"));
       return;
     }
-
     setLoading(true);
     try {
       const result = await resetPassword(email);
-      if (result.error) {
-        setError(resolveError(result.error));
-      } else {
-        setSuccess(t("auth.resetSent"));
-      }
+      if (result.error) setError(resolveError(result.error));
+      else setSuccess(t("auth.resetSent"));
     } finally {
       setLoading(false);
     }
@@ -185,7 +173,7 @@ export function AuthPage() {
             </span>
           </div>
 
-          <h1 className="text-3xl xl:text-4xl font-bold leading-tight mb-4 text-balance">
+          <h1 className="text-3xl xl:text-4xl font-bold leading-tight mb-4">
             {t("auth.enterprisePlatform")}
           </h1>
           <p className="text-royal-100 text-base leading-relaxed max-w-md">
@@ -231,10 +219,11 @@ export function AuthPage() {
         </div>
 
         <div className="flex-1 flex items-center justify-center p-6 sm:p-10">
-          <div className="w-full max-w-md animate-fade-in">
+          <div className="w-full max-w-md">
             <div className="flex justify-end mb-4 lg:hidden">
               <LanguageSwitcher />
             </div>
+
             <div className="bg-white border border-slate-200 rounded-xl shadow-lg p-6 sm:p-8">
               {/* Tabs */}
               <div className="flex border-b border-slate-200 mb-8">
@@ -281,7 +270,12 @@ export function AuthPage() {
                 </div>
               )}
 
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form
+                id="auth-form"
+                name="auth-form"
+                onSubmit={handleSubmit}
+                className="space-y-4"
+              >
                 {mode === "signup" && (
                   <>
                     <div>
@@ -359,11 +353,6 @@ export function AuthPage() {
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                      aria-label={
-                        showPassword
-                          ? "Masquer le mot de passe"
-                          : "Afficher le mot de passe"
-                      }
                     >
                       {showPassword ? (
                         <EyeOff className="w-4 h-4" />
@@ -397,11 +386,6 @@ export function AuthPage() {
                           setShowConfirmPassword(!showConfirmPassword)
                         }
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                        aria-label={
-                          showConfirmPassword
-                            ? "Masquer le mot de passe"
-                            : "Afficher le mot de passe"
-                        }
                       >
                         {showConfirmPassword ? (
                           <EyeOff className="w-4 h-4" />
@@ -495,10 +479,14 @@ export function AuthPage() {
                     type="button"
                     onClick={handleDemoAccess}
                     disabled={loading}
-                    className="w-full py-2.5 px-4 rounded-lg border border-slate-200 bg-white text-slate-700 text-sm font-medium hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-300 focus:ring-offset-2 disabled:opacity-50 transition-colors"
+                    className="w-full py-2.5 px-4 rounded-lg border border-slate-200 bg-white text-slate-700 text-sm font-medium hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-300 focus:ring-offset-2 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
                   >
-                    {t("auth.demoAccess")}
+                    <span className="text-lg">🎭</span>
+                    {t("auth.demoAccess") || "Accès Démo"}
                   </button>
+                  <p className="text-xs text-slate-400 text-center mt-2">
+                    Explorez ORION avec des données fictives
+                  </p>
                 </>
               )}
             </div>

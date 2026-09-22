@@ -1,23 +1,19 @@
-// src/components/auth/ProtectedRoute.tsx
+// src/components/auth/RoleGuard.tsx
 import type { ReactNode } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import { useDemo } from "../../contexts/DemoContext";
 
-interface ProtectedRouteProps {
+interface RoleGuardProps {
   children: ReactNode;
 }
 
-export function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { user, loading } = useAuth();
-  const { isDemo } = useDemo();
+export function RoleGuard({ children }: RoleGuardProps) {
+  const { user, loading, isDemo } = useAuth();
+  const { isDemo: isDemoContext } = useDemo();
 
-  // ⭐ MODE DÉMO : accès autorisé sans authentification
-  if (isDemo) {
-    return <>{children}</>;
-  }
+  const inDemo = isDemo || isDemoContext;
 
-  // Pendant le chargement de l'auth, afficher un spinner
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -26,9 +22,12 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     );
   }
 
-  // Pas connecté → redirection vers login
-  if (!user) {
-    return <Navigate to="/login" replace />;
+  if (inDemo) return <>{children}</>;
+  if (!user) return <>{children}</>;
+
+  const hasNoRole = !user.role || user.role === "";
+  if (hasNoRole) {
+    return <Navigate to="/pending-approval" replace />;
   }
 
   return <>{children}</>;

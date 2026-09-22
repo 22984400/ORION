@@ -1,5 +1,4 @@
 // src/pages/FindingsPage.tsx
-
 import { useState, useMemo } from "react";
 import { Plus, Edit, Trash2 } from "lucide-react";
 import { PageHeader } from "../components/ui/PageHeader";
@@ -11,38 +10,54 @@ import { mapFindingRow } from "../lib/db-mappers";
 import { RISK_LABELS } from "../lib/constants";
 import { cn, formatDate } from "../lib/utils";
 import { supabase } from "../lib/supabase";
+import { addNotification } from "../lib/notifications"; // ⭐ FIX 1: Added import
 import type { Finding, ColumnDef } from "../types";
+
+// ⭐ FIX 2: Extended type with concerned_person + index signature
+type FindingExtended = Finding & {
+  concerned_person?: string | null;
+  [key: string]: unknown; // ⭐ Allows the type to be used with DataTable
+};
 
 export function FindingsPage() {
   const [filter, setFilter] = useState("all");
+
+  // ⭐ FIX 3: Use `any` generic to avoid strict type mismatch
   const {
     data: rawData,
     loading,
     error,
     refetch,
-  } = useSupabaseQuery<Record<string, unknown>>({
+  } = useSupabaseQuery<any>({
     table: "findings",
     orderBy: "created_at",
     orderAsc: false,
   });
 
   const [showModal, setShowModal] = useState(false);
-  const [editingFinding, setEditingFinding] = useState<Finding | null>(null);
+  const [editingFinding, setEditingFinding] = useState<FindingExtended | null>(
+    null,
+  );
   const [form, setForm] = useState({
     finding: "",
     risk_level: "medium",
     status: "open",
     recommendation: "",
-    responsible_person: "", // Champ texte
-    concerned_person: "", // Champ texte
+    responsible_person: "",
+    concerned_person: "",
     target_date: "",
   });
 
-  const data = useMemo(() => rawData.map(mapFindingRow), [rawData]);
+  const data = useMemo<FindingExtended[]>(
+    () => (rawData || []).map(mapFindingRow) as FindingExtended[],
+    [rawData],
+  );
+
   const filtered =
     filter === "all"
       ? data
       : data.filter((f) => f.status === filter || f.risk_level === filter);
+
   const riskSummary = {
     critical: data.filter((f) => f.risk_level === "critical").length,
     high: data.filter((f) => f.risk_level === "high").length,
@@ -121,7 +136,7 @@ export function FindingsPage() {
     }
   };
 
-  const openEdit = (finding: Finding) => {
+  const openEdit = (finding: FindingExtended) => {
     setEditingFinding(finding);
     setForm({
       finding: finding.finding,
@@ -129,7 +144,7 @@ export function FindingsPage() {
       status: finding.status,
       recommendation: finding.recommendation || "",
       responsible_person: finding.responsible_person || "",
-      concerned_person: (finding as any).concerned_person || "",
+      concerned_person: finding.concerned_person || "",
       target_date: finding.target_date || "",
     });
     setShowModal(true);
@@ -149,7 +164,8 @@ export function FindingsPage() {
     setShowModal(true);
   };
 
-  const columns: ColumnDef<Finding>[] = [
+  // ⭐ FIX 4: Use ColumnDef<FindingExtended>[] to match data type
+  const columns: ColumnDef<FindingExtended>[] = [
     {
       key: "finding",
       label: "Constat",
@@ -243,7 +259,8 @@ export function FindingsPage() {
       key: "id",
       label: "Actions",
       sortable: false,
-      render: (value, row) => (
+      // ⭐ FIX 5: Prefix unused `value` with underscore
+      render: (_value, row) => (
         <div className="flex gap-1">
           <button
             onClick={() => openEdit(row)}
@@ -420,7 +437,6 @@ export function FindingsPage() {
                 />
               </div>
 
-              {/* Responsable : champ texte simple */}
               <div>
                 <label className="text-xs text-slate-400 mb-1 block">
                   Responsable
@@ -439,7 +455,6 @@ export function FindingsPage() {
                 />
               </div>
 
-              {/* Personne concernée : champ texte simple */}
               <div>
                 <label className="text-xs text-slate-400 mb-1 block">
                   Personne concernée

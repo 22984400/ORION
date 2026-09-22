@@ -10,7 +10,11 @@ import {
 import { useTranslation } from "react-i18next";
 import { AppLayout } from "./components/layout/AppLayout";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
+import { RoleGuard } from "./components/auth/RoleGuard";
 import { AuthPage } from "./pages/auth/AuthPage";
+import { PendingApprovalPage } from "./pages/PendingApprovalPage";
+import { DemoProvider } from "./contexts/DemoContext";
+import { WriteBlocker } from "./components/security/WriteBlocker";
 
 // ========== FALLBACK ==========
 function LoadingFallback() {
@@ -45,7 +49,6 @@ function ErrorFallback({ error }: { error: Error }) {
   );
 }
 
-// ========== UTILITAIRE ==========
 const lazyWithError = (importFn: () => Promise<any>) => {
   return lazy(() =>
     importFn().catch((error) => {
@@ -55,12 +58,11 @@ const lazyWithError = (importFn: () => Promise<any>) => {
   );
 };
 
-// ========== PAGES PRINCIPALES (avec lazyWithError) ==========
+// ========== LAZY PAGES ==========
 const DashboardPage = lazyWithError(() =>
   import("./pages/DashboardPage").then((m) => ({ default: m.DashboardPage })),
 );
 const ClientsPage = lazyWithError(() => import("./pages/clients/ClientsPage"));
-
 const EngagementsPage = lazyWithError(() =>
   import("./pages/engagements/EngagementsPage").then((m) => ({
     default: m.EngagementsPage,
@@ -103,7 +105,6 @@ const NotificationsPage = lazyWithError(() =>
 const Manuel = lazyWithError(() => import("./pages/manuel/Manuel"));
 const NoteDeFrais = lazyWithError(() => import("./pages/noteDeFrais/index"));
 
-// ========== COLLABORATEURS ==========
 const CollaborateurFiche = lazyWithError(
   () => import("./pages/collaborateurs/CollaborateurFiche"),
 );
@@ -113,7 +114,6 @@ const CollaborateurList = lazyWithError(() =>
   })),
 );
 
-// ========== FACTURES (INVOICES) ==========
 const InvoicesPage = lazyWithError(
   () => import("./pages/facture/InvoicesPage"),
 );
@@ -124,7 +124,6 @@ const InvoiceFormPage = lazyWithError(
   () => import("./pages/facture/InvoiceFormPage"),
 );
 
-// ========== SUIVI CAC ==========
 const CACFollowUpPage = lazyWithError(() =>
   import("./pages/cac/CACFollowUpPage").then((m) => ({
     default: m.default,
@@ -135,109 +134,118 @@ const ResourcesPage = lazyWithError(() =>
     default: m.ResourcesPage,
   })),
 );
-
 const FournisseursPage = lazyWithError(() =>
   import("./pages/fournisseur/FournisseursPage").then((m) => ({
     default: m.FournisseursPage,
   })),
 );
-
 const ProfilePage = lazyWithError(() =>
   import("./pages/profile/ProfilePage").then((m) => ({
     default: m.ProfilePage,
   })),
 );
 
-// ========== CAISSE ==========
 import { CaissePage } from "./pages/caisse/CaissePage";
-
-// ========== MISSIONS CAC (imports default) ==========
 import MissionCACListe from "./pages/missions/cac/MissionCACListe";
 import MissionCACForm from "./pages/missions/cac/MissionCACForm";
 import MissionCACDetail from "./pages/missions/cac/MissionCACDetail";
 
-// ========== APPLICATION SHELL ==========
+// ========== APP SHELL ==========
 function AppShell() {
   return (
     <ProtectedRoute>
-      <AppLayout>
-        <Suspense fallback={<LoadingFallback />}>
-          <Outlet />
-        </Suspense>
-      </AppLayout>
+      <RoleGuard>
+        <AppLayout>
+          <Suspense fallback={<LoadingFallback />}>
+            <Outlet />
+          </Suspense>
+        </AppLayout>
+      </RoleGuard>
     </ProtectedRoute>
   );
 }
 
-// ========== COMPOSANT PRINCIPAL ==========
+// ========== APP ==========
 function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        {/* Auth */}
-        <Route path="/login" element={<AuthPage />} />
-        <Route
-          path="/signup"
-          element={<Navigate to="/login?tab=signup" replace />}
-        />
-
-        {/* Routes protégées */}
-        <Route element={<AppShell />}>
-          <Route path="/" element={<DashboardPage />} />
-          <Route path="/clients" element={<ClientsPage />} />
-          <Route path="/engagements" element={<EngagementsPage />} />
-          <Route path="/review-notes" element={<ReviewNotesPage />} />
-          <Route path="/findings" element={<FindingsPage />} />
-          <Route path="/working-papers" element={<WorkingPapersPage />} />
-
-          {/* ✅ NOUVELLE LIGNE AJOUTÉE : Redirige /upload et /working-papers/request vers /working-papers */}
+      <DemoProvider>
+        <WriteBlocker />
+        <Routes>
+          {/* Auth */}
+          <Route path="/login" element={<AuthPage />} />
           <Route
-            path="/upload"
-            element={<Navigate to="/working-papers" replace />}
-          />
-          <Route
-            path="/working-papers/request"
-            element={<Navigate to="/working-papers" replace />}
+            path="/signup"
+            element={<Navigate to="/login?tab=signup" replace />}
           />
 
-          <Route path="/stock" element={<StockPage />} />
-          <Route path="/fixed-assets" element={<FixedAssetsPage />} />
-          <Route path="/search" element={<SearchPage />} />
-          <Route path="/leave" element={<LeavePage />} />
-
-          {/* ✅ NOUVELLE LIGNE AJOUTÉE : Redirige l'ancien lien cassé vers la bonne page */}
+          {/* Pending approval */}
           <Route
-            path="/leave/request"
-            element={<Navigate to="/leave" replace />}
+            path="/pending-approval"
+            element={
+              <ProtectedRoute>
+                <PendingApprovalPage />
+              </ProtectedRoute>
+            }
           />
 
-          <Route path="/team" element={<TeamPage />} />
-          <Route path="/reports" element={<ReportsPage />} />
-          <Route path="/notifications" element={<NotificationsPage />} />
-          <Route path="/manuel" element={<Manuel />} />
-          <Route path="/note-de-frais" element={<NoteDeFrais />} />
-          <Route path="/resources" element={<ResourcesPage />} />
-          <Route path="/caisse" element={<CaissePage />} />
-          {/* Collaborateurs */}
-          <Route path="/collaborateurs" element={<CollaborateurList />} />
-          <Route path="/collaborateurs/new" element={<CollaborateurFiche />} />
-          <Route path="/collaborateurs/:id" element={<CollaborateurFiche />} />
-          <Route path="/fournisseurs" element={<FournisseursPage />} />
-          {/* Factures */}
-          <Route path="/factures" element={<InvoicesPage />} />
-          <Route path="/factures/new" element={<InvoiceFormPage />} />
-          <Route path="/factures/:id" element={<InvoiceDetailPage />} />
-          <Route path="/factures/:id/edit" element={<InvoiceFormPage />} />
-          <Route path="/profile" element={<ProfilePage />} />
-          {/* Missions CAC */}
-          <Route path="/missions/cac" element={<MissionCACListe />} />
-          <Route path="/missions/cac/nouveau" element={<MissionCACForm />} />
-          <Route path="/missions/cac/:id" element={<MissionCACDetail />} />
-          <Route path="/missions/cac/:id/edit" element={<MissionCACForm />} />
-          {/* Suivi CAC */}
-          <Route path="/cac-suivi" element={<CACFollowUpPage />} />
-        </Route>
-      </Routes>
+          {/* Protected routes */}
+          <Route element={<AppShell />}>
+            <Route path="/" element={<DashboardPage />} />
+            <Route path="/clients" element={<ClientsPage />} />
+            <Route path="/engagements" element={<EngagementsPage />} />
+            <Route path="/review-notes" element={<ReviewNotesPage />} />
+            <Route path="/findings" element={<FindingsPage />} />
+            <Route path="/working-papers" element={<WorkingPapersPage />} />
+            <Route
+              path="/upload"
+              element={<Navigate to="/working-papers" replace />}
+            />
+            <Route
+              path="/working-papers/request"
+              element={<Navigate to="/working-papers" replace />}
+            />
+            <Route path="/stock" element={<StockPage />} />
+            <Route path="/fixed-assets" element={<FixedAssetsPage />} />
+            <Route path="/search" element={<SearchPage />} />
+            <Route path="/leave" element={<LeavePage />} />
+            <Route
+              path="/leave/request"
+              element={<Navigate to="/leave" replace />}
+            />
+            <Route path="/team" element={<TeamPage />} />
+            <Route path="/reports" element={<ReportsPage />} />
+            <Route path="/notifications" element={<NotificationsPage />} />
+            <Route path="/manuel" element={<Manuel />} />
+            <Route path="/note-de-frais" element={<NoteDeFrais />} />
+            <Route path="/resources" element={<ResourcesPage />} />
+            <Route path="/caisse" element={<CaissePage />} />
+            <Route path="/collaborateurs" element={<CollaborateurList />} />
+            <Route
+              path="/collaborateurs/new"
+              element={<CollaborateurFiche />}
+            />
+            <Route
+              path="/collaborateurs/:id"
+              element={<CollaborateurFiche />}
+            />
+            <Route path="/fournisseurs" element={<FournisseursPage />} />
+            <Route path="/factures" element={<InvoicesPage />} />
+            <Route path="/factures/new" element={<InvoiceFormPage />} />
+            <Route path="/factures/:id" element={<InvoiceDetailPage />} />
+            <Route path="/factures/:id/edit" element={<InvoiceFormPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/missions/cac" element={<MissionCACListe />} />
+            <Route path="/missions/cac/nouveau" element={<MissionCACForm />} />
+            <Route path="/missions/cac/:id" element={<MissionCACDetail />} />
+            <Route path="/missions/cac/:id/edit" element={<MissionCACForm />} />
+            <Route path="/cac-suivi" element={<CACFollowUpPage />} />
+
+            {/* Catch-all: redirect to dashboard */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        </Routes>
+      </DemoProvider>
     </BrowserRouter>
   );
 }

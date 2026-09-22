@@ -1,6 +1,7 @@
+// src/pages/team/TeamPage.tsx
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { Plus, Mail, MoreHorizontal, Save, Lock } from "lucide-react";
+import { Mail, MoreHorizontal, Save, Lock, RefreshCw } from "lucide-react";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Badge } from "../../components/ui/Badge";
 import { cn, getInitials } from "../../lib/utils";
@@ -9,99 +10,118 @@ import { supabase } from "../../lib/supabase";
 import { useSupabaseQuery } from "../../hooks/useSupabaseData";
 import { USER_ROLE_LABELS } from "../../lib/constants";
 import type { User } from "../../types";
+import {
+  MODULES,
+  ACTIONS,
+  POSTES,
+  MODULE_LABELS,
+  ACTION_LABELS,
+  getPermissionsForRole,
+  hasAtLeastOnePermission,
+  type RolePermissions,
+  type ActionId,
+  type ModuleId,
+} from "../../lib/permissions";
 
-// ============================================================
-// 🆕 NOUVEAUX MODULES (20)
-// ============================================================
-const MODULES = [
-  { id: "dashboard", label: "Tableau de bord" },
-  { id: "clients", label: "Clients" },
-  { id: "missions", label: "Missions" },
-  { id: "review_notes", label: "Notes de revue" },
-  { id: "findings", label: "Constats" },
-  { id: "besoins_cabinet", label: "Besoins cabinet" },
-  { id: "stock", label: "Stock" },
-  { id: "immobilisations", label: "Immobilisations" },
-  { id: "caisse", label: "Caisse" },
-  { id: "suivi_missions", label: "Suivi des missions" },
-  { id: "conges", label: "Congés" },
-  { id: "manuel", label: "Manuel" },
-  { id: "notes_frais", label: "Notes de frais" },
-  { id: "fournisseurs", label: "Fournisseurs" },
-  { id: "ressources_internes", label: "Ressources internes" },
-  { id: "collaborateurs", label: "Collaborateurs" },
-  { id: "factures", label: "Factures" },
-  { id: "equipe", label: "Équipe" },
-  { id: "rapports", label: "Rapports" },
-  { id: "notifications", label: "Notifications" },
-];
+const SUPER_ADMIN_ROLE = "super_admin" as const;
 
-// ============================================================
-// 🆕 NOUVEAUX RÔLES (17)
-// ============================================================
-const ROLES = [
-  { id: "super_admin", label: "Super Admin" },
-  { id: "associe", label: "Associé" },
-  { id: "assistant_administratif", label: "Assistant Administratif" },
-  { id: "rh", label: "RH (Ressources Humaines)" },
-  {
-    id: "responsable_controle_interne",
-    label: "Responsable Contrôle Interne et Conformité",
-  },
-  {
-    id: "responsable_admin_fin",
-    label: "Responsable Administratif et Financier",
-  },
-  { id: "associe_gerant", label: "Associé Gérant" },
-  { id: "manageur", label: "Manageur" },
-  { id: "superviseur", label: "Superviseur" },
-  { id: "senior_audit", label: "Senior Audit" },
-  { id: "senior_expertise", label: "Senior Expertise" },
-  { id: "junior_audit", label: "Junior Audit" },
-  { id: "junior_expertise", label: "Junior Expertise" },
-  { id: "directeur_bureau", label: "Directeur du Bureau" },
-  { id: "formateur_senior", label: "Formateur Senior" },
-  { id: "formateur_junior", label: "Formateur Junior" },
-  { id: "chef_mission", label: "Chef de Mission" },
-];
-
-type PermissionsMap = Record<string, Record<string, boolean>>;
+type PermissionsMap = Record<string, RolePermissions>;
 
 export function TeamPage() {
   const { t } = useTranslation();
-  // --- Partie utilisateurs (existant) ---
-  const { data: team, refetch } = useSupabaseQuery<User>({
+
+  const { data: team } = useSupabaseQuery<User>({
     table: "profiles",
     orderBy: "full_name",
   });
   const [view, setView] = useState<"grid" | "list">("grid");
   const [roleFilter, setRoleFilter] = useState<string>("all");
 
-  // --- Partie permissions ---
   const [permissions, setPermissions] = useState<PermissionsMap>({});
   const [loadingPerms, setLoadingPerms] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [seeded, setSeeded] = useState(false);
 
   const filteredTeam =
     roleFilter === "all" ? team : team.filter((u) => u.role === roleFilter);
 
-  // Charger les permissions
+  // ============================================================
+  // Helper : construit la map de permissions depuis les données brutes
+  // ============================================================
+  const buildPermissionsMap = (data: any[]): PermissionsMap => {
+    const map: PermissionsMap = {};
+    // 1. Base : matrice du code (issu de l'Excel)
+    POSTES.forEach((p) => {
+      map[p] = getPermissionsForRole(p);
+    });
+    // 2. Override : données de la base (sauf super_admin)
+    (data || []).forEach((row: any) => {
+      if (row.role === SUPER_ADMIN_ROLE) return;
+      if (row.permissions && typeof row.permissions === "object") {
+        map[row.role] = row.permissions as RolePermissions;
+      }
+    });
+    return map;
+  };
+
+  // ============================================================
+  // CHARGEMENT DES PERMISSIONS + AUTO-SEED
+  // ============================================================
   const fetchPermissions = async () => {
     setLoadingPerms(true);
-    const { data, error } = await supabase
+    setError(null);
+
+    const { data, error: fetchError } = await supabase
       .from("role_permissions")
       .select("role, permissions");
-    if (error) {
-      alert("Erreur de chargement des permissions : " + error.message);
+
+    if (fetchError) {
+      setError("Erreur de chargement : " + fetchError.message);
+      alert("Erreur de chargement des permissions : " + fetchError.message);
       setLoadingPerms(false);
       return;
     }
-    const map: PermissionsMap = {};
-    data.forEach((row) => {
-      map[row.role] = row.permissions || {};
-    });
-    setPermissions(map);
+
+    // ⭐ AUTO-SEED : si la table est vide, on insère TOUTE la matrice
+    if (!data || data.length === 0) {
+      console.log("[TeamPage] role_permissions vide → auto-seed en cours...");
+
+      const seedRows = POSTES.filter((p) => p !== SUPER_ADMIN_ROLE).map(
+        (role) => ({
+          role,
+          permissions: getPermissionsForRole(role),
+        }),
+      );
+
+      const { error: seedError } = await supabase
+        .from("role_permissions")
+        .upsert(seedRows, { onConflict: "role" });
+
+      if (seedError) {
+        console.error("[TeamPage] Auto-seed échoué :", seedError);
+        setError("Erreur auto-seed : " + seedError.message);
+      } else {
+        console.log(
+          `✅ [TeamPage] ${seedRows.length} postes auto-seedés en base.`,
+        );
+        setSeeded(true);
+        setTimeout(() => setSeeded(false), 5000);
+      }
+
+      // Recharger après seed
+      const { data: reloaded } = await supabase
+        .from("role_permissions")
+        .select("role, permissions");
+
+      setPermissions(buildPermissionsMap(reloaded || []));
+      setLoadingPerms(false);
+      return;
+    }
+
+    // Cas normal : la table a déjà des données
+    setPermissions(buildPermissionsMap(data));
     setLoadingPerms(false);
   };
 
@@ -109,65 +129,168 @@ export function TeamPage() {
     fetchPermissions();
   }, []);
 
-  // Sauvegarder les permissions
+  // ============================================================
+  // SAUVEGARDE (avec avertissement au lieu de blocage)
+  // ============================================================
   const handleSavePermissions = async () => {
     setSaving(true);
     setSaved(false);
+    setError(null);
+
     try {
-      const updates = Object.entries(permissions).map(([role, perms]) => ({
-        role,
-        permissions: perms,
-      }));
+      const emptyPostes: string[] = [];
+      for (const poste of POSTES) {
+        if (poste === SUPER_ADMIN_ROLE) continue;
+        const perms = permissions[poste];
+        if (!perms || !hasAtLeastOnePermission(perms)) {
+          const label = USER_ROLE_LABELS[poste] || poste;
+          emptyPostes.push(label);
+        }
+      }
+
+      if (emptyPostes.length > 0) {
+        const confirmed = window.confirm(
+          `Les postes suivants n'ont AUCUNE permission :\n\n` +
+            emptyPostes.map((l) => `• ${l}`).join("\n") +
+            `\n\nVoulez-vous continuer la sauvegarde quand même ?`,
+        );
+        if (!confirmed) {
+          setSaving(false);
+          return;
+        }
+      }
+
+      const updates = Object.entries(permissions)
+        .filter(([role]) => role !== SUPER_ADMIN_ROLE)
+        .filter(([, perms]) => hasAtLeastOnePermission(perms))
+        .map(([role, perms]) => ({ role, permissions: perms }));
+
       for (const update of updates) {
-        const { error } = await supabase
+        const { error: upsertError } = await supabase
           .from("role_permissions")
           .upsert(
             { role: update.role, permissions: update.permissions },
             { onConflict: "role" },
           );
-        if (error) throw error;
+        if (upsertError) throw upsertError;
       }
+
       setSaved(true);
       void addNotification({
         title: "Permissions mises à jour",
-        message: "Les permissions de l'équipe ont été mises à jour.",
+        message: `Les permissions de l'équipe ont été mises à jour (${updates.length} postes).`,
         type: "team",
       });
       setTimeout(() => setSaved(false), 3000);
     } catch (err: any) {
+      setError(err.message);
       alert("Erreur de sauvegarde : " + err.message);
     } finally {
       setSaving(false);
     }
   };
 
-  // --- Gestion des toggles ---
-  const togglePermission = (role: string, moduleId: string) => {
+  // ============================================================
+  // RESET : restaure la matrice depuis le code
+  // ============================================================
+  const handleResetToDefaults = async () => {
+    const confirmed = window.confirm(
+      "Réinitialiser TOUTES les permissions aux valeurs par défaut (issues de l'Excel) ?\n\n" +
+        "⚠️ Toutes les modifications manuelles seront perdues.",
+    );
+    if (!confirmed) return;
+
+    setSaving(true);
+    setError(null);
+
+    try {
+      const seedRows = POSTES.filter((p) => p !== SUPER_ADMIN_ROLE).map(
+        (role) => ({
+          role,
+          permissions: getPermissionsForRole(role),
+        }),
+      );
+
+      const { error: seedError } = await supabase
+        .from("role_permissions")
+        .upsert(seedRows, { onConflict: "role" });
+
+      if (seedError) throw seedError;
+
+      await fetchPermissions();
+      setSaved(true);
+      void addNotification({
+        title: "Permissions réinitialisées",
+        message:
+          "Toutes les permissions ont été restaurées aux valeurs par défaut.",
+        type: "team",
+      });
+      setTimeout(() => setSaved(false), 3000);
+    } catch (err: any) {
+      setError(err.message);
+      alert("Erreur de réinitialisation : " + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ============================================================
+  // GESTION DES TOGGLES
+  // ============================================================
+  const togglePermission = (
+    role: string,
+    moduleId: ModuleId,
+    action: ActionId,
+  ) => {
+    if (role === SUPER_ADMIN_ROLE) return;
     setPermissions((prev) => {
-      const rolePerms = { ...(prev[role] || {}) };
-      rolePerms[moduleId] = !rolePerms[moduleId];
+      const rolePerms = { ...(prev[role] || {}) } as RolePermissions;
+      const current = rolePerms[moduleId] || {
+        create: false,
+        view: false,
+        edit: false,
+        delete: false,
+      };
+      rolePerms[moduleId] = { ...current, [action]: !current[action] };
       return { ...prev, [role]: rolePerms };
     });
   };
 
   const toggleAllForRole = (role: string, value: boolean) => {
-    const newPerms: Record<string, boolean> = {};
-    MODULES.forEach((m) => (newPerms[m.id] = value));
+    if (role === SUPER_ADMIN_ROLE) return;
+    const newPerms = {} as RolePermissions;
+    MODULES.forEach((m) => {
+      newPerms[m] = { create: value, view: value, edit: value, delete: value };
+    });
     setPermissions((prev) => ({ ...prev, [role]: newPerms }));
   };
 
-  const toggleModuleForAll = (moduleId: string, value: boolean) => {
+  const toggleModuleForAll = (
+    moduleId: ModuleId,
+    action: ActionId,
+    value: boolean,
+  ) => {
     setPermissions((prev) => {
       const newMap = { ...prev };
-      ROLES.forEach((r) => {
-        if (!newMap[r.id]) newMap[r.id] = {};
-        newMap[r.id][moduleId] = value;
+      POSTES.forEach((p) => {
+        if (p === SUPER_ADMIN_ROLE) return;
+        const rolePerms = { ...(newMap[p] || {}) } as RolePermissions;
+        const current = rolePerms[moduleId] || {
+          create: false,
+          view: false,
+          edit: false,
+          delete: false,
+        };
+        rolePerms[moduleId] = { ...current, [action]: value };
+        newMap[p] = rolePerms;
       });
       return newMap;
     });
   };
 
-  // --- Rendu ---
+  // ============================================================
+  // RENDU
+  // ============================================================
   return (
     <div className="page-container">
       <PageHeader
@@ -175,6 +298,15 @@ export function TeamPage() {
         description={t("team.manage")}
         actions={
           <div className="flex gap-2">
+            <button
+              onClick={handleResetToDefaults}
+              className="btn-secondary btn-md flex items-center gap-2"
+              disabled={saving}
+              title="Restaurer la matrice depuis l'Excel"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Réinitialiser
+            </button>
             <button
               onClick={handleSavePermissions}
               className="btn-primary btn-md"
@@ -187,9 +319,19 @@ export function TeamPage() {
         }
       />
 
+      {seeded && (
+        <div className="mb-4 px-3 py-2 rounded-lg bg-info-500/10 text-info-500 text-sm border border-info-500/25">
+          ⚡ Base initialisée automatiquement avec la matrice par défaut.
+        </div>
+      )}
       {saved && (
         <div className="mb-4 px-3 py-2 rounded-lg bg-success-500/10 text-success-500 text-sm border border-success-500/25">
           ✅ {t("team.saved")}
+        </div>
+      )}
+      {error && (
+        <div className="mb-4 px-3 py-2 rounded-lg bg-error-500/10 text-error-500 text-sm border border-error-500/25">
+          ⚠️ {error}
         </div>
       )}
 
@@ -248,7 +390,7 @@ export function TeamPage() {
         </div>
       </div>
 
-      {/* Affichage des utilisateurs - version grille (inchangée) */}
+      {/* Affichage des utilisateurs */}
       {view === "grid" ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filteredTeam.map((member) => (
@@ -336,17 +478,20 @@ export function TeamPage() {
         </div>
       )}
 
-      {/* ---------- WIDGET DES PERMISSIONS ---------- */}
+      {/* ============================================================
+          MATRICE DES PERMISSIONS
+          ============================================================ */}
       <div className="mt-10">
         <div className="flex items-center gap-2 mb-4">
           <Lock className="w-4 h-4 text-primary-400" />
           <h3 className="text-sm font-semibold text-slate-100">
-            Permissions par rôle
+            Permissions par poste
           </h3>
           <span className="text-xs text-slate-400">
             (Cochez pour accorder l'accès)
           </span>
         </div>
+
         {loadingPerms ? (
           <div className="flex items-center justify-center h-40">
             <div className="w-8 h-8 border-2 border-primary-500/30 border-t-primary-500 rounded-full animate-spin" />
@@ -354,90 +499,158 @@ export function TeamPage() {
         ) : (
           <div className="card overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="text-xs" style={{ minWidth: "2400px" }}>
                 <thead>
                   <tr className="border-b border-slate-700/50">
-                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider sticky left-0 bg-slate-900">
-                      Rôle
+                    <th
+                      className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider sticky left-0 bg-slate-900 z-20"
+                      rowSpan={2}
+                    >
+                      Poste
                     </th>
                     {MODULES.map((m) => (
                       <th
-                        key={m.id}
-                        className="px-2 py-3 text-center text-xs font-medium text-slate-400 uppercase tracking-wider"
+                        key={m}
+                        colSpan={4}
+                        className="px-2 py-2 text-center text-[10px] font-medium text-slate-300 uppercase tracking-wider border-l border-slate-700/40"
                       >
-                        <span className="text-[10px]">{m.label}</span>
+                        {MODULE_LABELS[m]}
                       </th>
                     ))}
                   </tr>
+                  <tr className="border-b border-slate-700/50">
+                    {MODULES.map((m) =>
+                      ACTIONS.map((a) => (
+                        <th
+                          key={`${m}-${a}`}
+                          className="px-1 py-2 text-center text-[9px] font-medium text-slate-500 uppercase"
+                        >
+                          {ACTION_LABELS[a]}
+                        </th>
+                      )),
+                    )}
+                  </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-700/30">
-                  {ROLES.map((role) => {
-                    const rolePerms = permissions[role.id] || {};
-                    const hasAll = MODULES.every(
-                      (m) => rolePerms[m.id] === true,
-                    );
+                  {POSTES.map((poste) => {
+                    const isSuperAdmin = poste === SUPER_ADMIN_ROLE;
+                    const rolePerms =
+                      permissions[poste] || ({} as RolePermissions);
+                    const posteLabel = USER_ROLE_LABELS[poste] || poste;
+
                     return (
                       <tr
-                        key={role.id}
-                        className="hover:bg-slate-700/20 transition-colors"
+                        key={poste}
+                        className={cn(
+                          "hover:bg-slate-700/20 transition-colors",
+                          isSuperAdmin && "bg-warning-500/5",
+                        )}
                       >
-                        <td className="px-4 py-3 sticky left-0 bg-slate-900 font-medium text-slate-100 flex items-center gap-2">
-                          <Badge variant="primary" className="text-[10px]">
-                            {role.label}
-                          </Badge>
-                          <button
-                            onClick={() => toggleAllForRole(role.id, !hasAll)}
-                            className="text-2xs text-slate-400 hover:text-slate-200 underline"
-                          >
-                            {hasAll ? "Tout désactiver" : "Tout activer"}
-                          </button>
+                        <td className="px-4 py-3 sticky left-0 bg-slate-900 font-medium text-slate-100 z-10">
+                          <div className="flex flex-col gap-1">
+                            <Badge
+                              variant={isSuperAdmin ? "warning" : "primary"}
+                              className="text-[10px] w-fit"
+                            >
+                              {posteLabel}
+                            </Badge>
+                            {!isSuperAdmin && (
+                              <button
+                                onClick={() =>
+                                  toggleAllForRole(
+                                    poste,
+                                    !MODULES.every(
+                                      (m) =>
+                                        rolePerms[m]?.create &&
+                                        rolePerms[m]?.view &&
+                                        rolePerms[m]?.edit &&
+                                        rolePerms[m]?.delete,
+                                    ),
+                                  )
+                                }
+                                className="text-[9px] text-slate-400 hover:text-slate-200 underline w-fit"
+                              >
+                                Tout / Rien
+                              </button>
+                            )}
+                          </div>
                         </td>
-                        {MODULES.map((m) => (
-                          <td key={m.id} className="px-2 py-3 text-center">
-                            <input
-                              type="checkbox"
-                              checked={!!rolePerms[m.id]}
-                              onChange={() => togglePermission(role.id, m.id)}
-                              className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-primary-500 focus:ring-primary-500 focus:ring-offset-0 cursor-pointer"
-                            />
-                          </td>
-                        ))}
+
+                        {MODULES.map((m) => {
+                          const mp = rolePerms[m] || {
+                            create: false,
+                            view: false,
+                            edit: false,
+                            delete: false,
+                          };
+                          return ACTIONS.map((a) => {
+                            const checked = isSuperAdmin ? true : mp[a];
+                            return (
+                              <td
+                                key={`${poste}-${m}-${a}`}
+                                className="px-1 py-3 text-center border-l border-slate-800/40"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  disabled={isSuperAdmin}
+                                  onChange={() => togglePermission(poste, m, a)}
+                                  className={cn(
+                                    "w-4 h-4 rounded border-slate-600 bg-slate-800 cursor-pointer",
+                                    isSuperAdmin
+                                      ? "text-warning-500 cursor-not-allowed"
+                                      : "text-primary-500 focus:ring-primary-500 focus:ring-offset-0",
+                                  )}
+                                />
+                              </td>
+                            );
+                          });
+                        })}
                       </tr>
                     );
                   })}
-                  {/* Ligne "Tous les rôles" */}
+
+                  {/* Ligne "Tous les postes" */}
                   <tr className="border-t border-slate-700/50 bg-slate-800/30">
-                    <td className="px-4 py-3 sticky left-0 bg-slate-800/30 font-medium text-slate-400 text-xs">
-                      Tous les rôles
+                    <td className="px-4 py-3 sticky left-0 bg-slate-800/30 font-medium text-slate-400 text-xs z-10">
+                      Tous les postes
                     </td>
-                    {MODULES.map((m) => {
-                      const allChecked = ROLES.every(
-                        (r) => permissions[r.id]?.[m.id] === true,
-                      );
-                      return (
-                        <td key={m.id} className="px-2 py-3 text-center">
-                          <input
-                            type="checkbox"
-                            checked={allChecked}
-                            onChange={() =>
-                              toggleModuleForAll(m.id, !allChecked)
-                            }
-                            className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-warning-500 focus:ring-warning-500 focus:ring-offset-0 cursor-pointer"
-                          />
-                        </td>
-                      );
-                    })}
+                    {MODULES.map((m) =>
+                      ACTIONS.map((a) => {
+                        const allChecked = POSTES.filter(
+                          (p) => p !== SUPER_ADMIN_ROLE,
+                        ).every((p) => permissions[p]?.[m]?.[a] === true);
+                        return (
+                          <td
+                            key={`all-${m}-${a}`}
+                            className="px-1 py-3 text-center border-l border-slate-800/40"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={allChecked}
+                              onChange={() =>
+                                toggleModuleForAll(m, a, !allChecked)
+                              }
+                              className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-warning-500 focus:ring-warning-500 focus:ring-offset-0 cursor-pointer"
+                            />
+                          </td>
+                        );
+                      }),
+                    )}
                   </tr>
                 </tbody>
               </table>
             </div>
           </div>
         )}
+
         <div className="mt-2 text-xs text-slate-400 flex items-center gap-2">
           <Lock className="w-3 h-3" />
           <span>
-            Les modifications sont sauvegardées en cliquant sur le bouton
-            "Sauvegarder les permissions" en haut.
+            Les modifications sont sauvegardées via le bouton en haut. Le{" "}
+            <b>Super Admin</b> a automatiquement tous les droits (non
+            modifiable). Le bouton <b>Réinitialiser</b> restaure la matrice
+            Excel d'origine.
           </span>
         </div>
       </div>

@@ -77,9 +77,9 @@ export function AuthPage() {
   }
 
   function resolveError(code: string) {
-    const key = `auth.errors.${code}`;
-    const translated = t(key);
-    return translated === key ? t("auth.errors.generic") : translated;
+    // ⭐ Afficher le VRAI message d'erreur, pas un générique
+    console.error("🔴 [AuthPage] Erreur brute:", code);
+    return code; // Retourne le message brut
   }
 
   function validate(): string | null {
@@ -129,19 +129,35 @@ export function AuthPage() {
   async function handleForgotPassword() {
     setError(null);
     setSuccess(null);
+
     if (!email.trim()) {
-      setError(t("auth.errors.emailRequired"));
+      const msg = "Veuillez saisir votre adresse e-mail d'abord.";
+      setError(msg);
+      alert("⚠️ " + msg);
       return;
     }
     if (!isValidEmail(email)) {
-      setError(t("auth.errors.emailInvalid"));
+      const msg = "Adresse e-mail invalide.";
+      setError(msg);
+      alert("⚠️ " + msg);
       return;
     }
+
     setLoading(true);
     try {
       const result = await resetPassword(email);
-      if (result.error) setError(resolveError(result.error));
-      else setSuccess(t("auth.resetSent"));
+      if (result.error) {
+        // ⭐ Affiche l'erreur réelle dans une popup
+        alert("❌ Erreur Supabase:\n\n" + result.error);
+        setError(result.error);
+      } else {
+        const ok = `✅ Email de réinitialisation envoyé à ${email}.\n\nVérifiez votre boîte de réception et vos spams.`;
+        setSuccess(ok);
+        alert(ok);
+      }
+    } catch (err: any) {
+      alert("💥 Exception: " + (err?.message || "Inconnue"));
+      setError(err?.message || "Exception inconnue");
     } finally {
       setLoading(false);
     }

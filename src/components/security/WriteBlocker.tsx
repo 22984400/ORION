@@ -24,14 +24,6 @@ function isAuthPage(): boolean {
 // ============================================================
 // STATE CHECKS
 // ============================================================
-function getRole(): string | null {
-  try {
-    return localStorage.getItem(USER_ROLE_KEY);
-  } catch {
-    return null;
-  }
-}
-
 function isDemoMode(): boolean {
   try {
     return localStorage.getItem(DEMO_KEY) === "true";
@@ -40,14 +32,26 @@ function isDemoMode(): boolean {
   }
 }
 
+function getRole(): string | null {
+  try {
+    return localStorage.getItem(USER_ROLE_KEY);
+  } catch {
+    return null;
+  }
+}
+
 /**
- * A user is "blocked" if:
- *  - They're in demo mode
- *  - Their role is "user"
- *  - Their role is null / empty
+ * A user is blocked (shows alert) ONLY if:
+ *  - NOT in demo mode
+ *  - AND (role is "user" OR role is null/empty)
+ *
+ * In demo mode: buttons are clickable (silent writes blocked in supabase.ts)
  */
 function isBlockedUser(): boolean {
-  if (isDemoMode()) return true;
+  // 🎭 Demo mode → NOT blocked at the UI level (writes are silently blocked in supabase.ts)
+  if (isDemoMode()) return false;
+
+  // 👤 Not demo → check role
   const role = getRole();
   if (role === "user") return true;
   return !role || role === "" || role === "null" || role === "undefined";
@@ -71,11 +75,7 @@ function showBlockedAlert() {
     'Your account currently has the role "user" which does not allow any operation.',
     "",
     "Contact your ORION administrator to assign you a role.",
-    "",
-    isDemoMode() ? "🎭 MODE DÉMO / DEMO MODE — Lecture seule / Read only" : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
+  ].join("\n");
 
   alert(message);
 }
@@ -90,9 +90,7 @@ function isActionableElement(el: Element): boolean {
 
   if (tag === "a") {
     const anchor = el as HTMLAnchorElement;
-    // Allow pure navigation links (no download attribute)
     if (anchor.hasAttribute("download")) return true;
-    // Other links pass through
     return false;
   }
 
@@ -122,17 +120,15 @@ export function WriteBlocker() {
 
   useEffect(() => {
     // ============================================================
-    // 1. BLOCK ALL CLICKS ON BUTTONS / ACTIONABLE ELEMENTS
+    // 1. BLOCK CLICKS ON BUTTONS / ACTIONABLE ELEMENTS
     // ============================================================
     const handleClick = (e: Event) => {
-      // Never block on auth pages
       if (isAuthPage()) return;
       if (!isBlockedUser()) return;
 
       const target = e.target as Element;
       if (!target) return;
 
-      // Walk up the DOM to find an actionable element
       let el: Element | null = target;
       while (el && el !== document.body) {
         if (isActionableElement(el)) {
@@ -155,7 +151,7 @@ export function WriteBlocker() {
     };
 
     // ============================================================
-    // 2. BLOCK FILE INPUTS (change event)
+    // 2. BLOCK FILE INPUTS
     // ============================================================
     const handleFileChange = (e: Event) => {
       if (isAuthPage()) return;
@@ -173,7 +169,7 @@ export function WriteBlocker() {
     };
 
     // ============================================================
-    // 3. BLOCK FILE PICKER BEFORE IT OPENS
+    // 3. BLOCK FILE PICKER
     // ============================================================
     const handleFileClick = (e: Event) => {
       if (isAuthPage()) return;
@@ -203,7 +199,7 @@ export function WriteBlocker() {
     };
 
     // ============================================================
-    // 5. BLOCK <a download> LINKS
+    // 5. BLOCK <a download>
     // ============================================================
     const handleAnchorClick = (e: Event) => {
       if (isAuthPage()) return;
@@ -225,7 +221,7 @@ export function WriteBlocker() {
     };
 
     // ============================================================
-    // 6. BLOCK FORM SUBMISSIONS (EXCEPT auth forms)
+    // 6. BLOCK FORM SUBMISSIONS (except auth forms)
     // ============================================================
     const handleFormSubmit = (e: Event) => {
       if (isAuthPage()) return;
@@ -234,7 +230,6 @@ export function WriteBlocker() {
       const form = e.target as HTMLFormElement;
       if (!form) return;
 
-      // Never block auth forms (login/signup/password reset)
       const formId = (form.id || "").toLowerCase();
       const formName = (form.getAttribute("name") || "").toLowerCase();
       const combined = `${formId} ${formName}`;
@@ -265,7 +260,6 @@ export function WriteBlocker() {
     document.addEventListener("change", handleFileChange, true);
     document.addEventListener("submit", handleFormSubmit, true);
 
-    // Watch for dynamically added file inputs
     const observer = new MutationObserver((mutations) => {
       mutations.forEach((mutation) => {
         mutation.addedNodes.forEach((node) => {

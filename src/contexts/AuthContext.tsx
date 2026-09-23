@@ -345,10 +345,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // RESET PASSWORD
   // ============================================================
   const resetPassword = async (email: string) => {
+    console.log("📧 [AuthContext] resetPassword appelé pour:", email);
+
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/login`,
+      redirectTo: `${window.location.origin}/reset-password`,
     });
-    return { error: error?.message ?? null };
+
+    console.log("📧 [AuthContext] Réponse Supabase:", error);
+
+    if (error) {
+      // ⭐ Retourne le VRAI message d'erreur
+      return { error: error.message };
+    }
+    return { error: null };
   };
 
   // ============================================================

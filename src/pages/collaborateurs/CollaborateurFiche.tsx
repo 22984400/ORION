@@ -350,8 +350,35 @@ const CheckItem = styled.div<{ $checked: boolean }>`
     border-radius: 4px;
     cursor: pointer;
     font-size: 11px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 4px;
     &:hover {
       background: #2563eb;
+    }
+  }
+  .delete-btn-text {
+    padding: 4px 8px;
+    background: #dc2626;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition:
+      background 0.2s,
+      transform 0.1s;
+    &:hover {
+      background: #b91c1c;
+      transform: scale(1.05);
+    }
+    &:active {
+      transform: scale(0.98);
     }
   }
   .del-btn {
@@ -600,7 +627,6 @@ const CollaborateurFiche: React.FC = () => {
         .upload(filePath, file);
       if (uploadError) throw uploadError;
 
-      // ⭐ Store PATH (not public URL)
       handleChange(field, filePath);
     } catch (err: any) {
       console.error(err);
@@ -663,7 +689,6 @@ const CollaborateurFiche: React.FC = () => {
         .upload(filePath, file);
       if (uploadError) throw uploadError;
 
-      // ⭐ Store PATH (not public URL)
       const { error: dbError } = await supabase
         .from("dossier_collaborateur")
         .upsert(
@@ -696,7 +721,6 @@ const CollaborateurFiche: React.FC = () => {
     }
   };
 
-  // ⭐ NEW: Remplacer un document existant
   const handleDossierReplace = async (itemKey: string, file: File) => {
     if (isNew) {
       alert("Veuillez d'abord enregistrer le collaborateur.");
@@ -714,13 +738,11 @@ const CollaborateurFiche: React.FC = () => {
       const fileName = `${id}_${itemKey}_${Date.now()}_${cleanName}.${fileExt}`;
       const filePath = `dossiers/${fileName}`;
 
-      // 1. Upload nouveau fichier
       const { error: uploadError } = await supabase.storage
         .from("documents")
         .upload(filePath, file);
       if (uploadError) throw uploadError;
 
-      // 2. Supprimer l'ancien fichier (best effort)
       const oldPath = dossier[itemKey]?.document_url;
       if (oldPath) {
         try {
@@ -733,7 +755,6 @@ const CollaborateurFiche: React.FC = () => {
         }
       }
 
-      // 3. Mettre à jour la base
       const { error: dbError } = await supabase
         .from("dossier_collaborateur")
         .upsert(
@@ -747,7 +768,6 @@ const CollaborateurFiche: React.FC = () => {
         );
       if (dbError) throw dbError;
 
-      // 4. Mettre à jour l'état local
       setDossier({
         ...dossier,
         [itemKey]: {
@@ -767,7 +787,10 @@ const CollaborateurFiche: React.FC = () => {
   };
 
   const deleteDossierDocument = async (itemKey: string) => {
-    if (!window.confirm("Supprimer ce document ?")) return;
+    if (
+      !window.confirm("Supprimer ce document ? Cette action est irréversible.")
+    )
+      return;
     try {
       await supabase.from("dossier_collaborateur").upsert(
         {
@@ -1124,7 +1147,7 @@ const CollaborateurFiche: React.FC = () => {
                                 className="link-icon"
                               />
 
-                              {/* ⭐ NOUVEAU : Remplacer */}
+                              {/* Remplacer */}
                               <input
                                 type="file"
                                 id={replaceInputId}
@@ -1155,11 +1178,11 @@ const CollaborateurFiche: React.FC = () => {
                               {/* Supprimer */}
                               <button
                                 type="button"
-                                className="del-btn"
+                                className="delete-btn-text"
                                 onClick={() => deleteDossierDocument(item.key)}
-                                title="Supprimer"
+                                title="Supprimer ce document"
                               >
-                                <i className="fas fa-trash"></i>
+                                <i className="fas fa-trash"></i> Supprimer
                               </button>
                             </>
                           ) : (

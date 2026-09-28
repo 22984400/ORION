@@ -7,9 +7,6 @@ import {
   Clock,
   UserCheck,
   UserX,
-  Download,
-  FileText,
-  X,
   Calculator,
   Calendar,
   Edit2,
@@ -18,6 +15,7 @@ import {
 } from "lucide-react";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Badge } from "../../components/ui/Badge";
+import { DocumentLink } from "../../components/DocumentLink";
 import { cn, formatDate } from "../../lib/utils";
 import { supabase } from "../../lib/supabase";
 import { addNotification } from "../../lib/notifications";
@@ -27,7 +25,6 @@ import type { LeaveRequest } from "../../types";
 
 const BUCKET_NAME = "leave_documents";
 
-// Compte les jours ouvrés (exclut les dimanches)
 function countWeekdaysExcludingSunday(start: Date, end: Date): number {
   let count = 0;
   const current = new Date(start);
@@ -38,13 +35,11 @@ function countWeekdaysExcludingSunday(start: Date, end: Date): number {
   return count;
 }
 
-// Calcule le nombre de mois complets entre deux dates
 function monthsBetween(date1: Date, date2: Date): number {
   const d1 = new Date(date1);
   const d2 = new Date(date2);
   let months = (d2.getFullYear() - d1.getFullYear()) * 12;
   months += d2.getMonth() - d1.getMonth();
-  // Si le jour du mois est inférieur, on retire un mois
   if (d2.getDate() < d1.getDate()) months--;
   return Math.max(0, months);
 }
@@ -72,9 +67,9 @@ export function LeavePage() {
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingFile, setEditingFile] = useState<File | null>(null);
-  const [updating, setUpdating] = useState(false);
+  // ✅ Fix: renommé `updating` en `_updating` (unused)
+  const [, setUpdating] = useState(false);
 
-  // Solde de congés
   const [balance, setBalance] = useState<{
     total_earned: number;
     taken: number;
@@ -87,24 +82,19 @@ export function LeavePage() {
   const [addingDays, setAddingDays] = useState(false);
   const [hireDate, setHireDate] = useState<string | null>(null);
 
-  // Modal date d'embauche
   const [showHireDateModal, setShowHireDateModal] = useState(false);
   const [newHireDate, setNewHireDate] = useState("");
 
-  // Charger le solde de congés
   const fetchBalance = async () => {
     if (!user) return;
     setLoadingBalance(true);
     try {
       const year = new Date().getFullYear();
-
-      // 1. Récupérer la date d'embauche
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("hire_date")
         .eq("id", user.id)
         .single();
-
       if (profileError) throw profileError;
       if (!profile?.hire_date) {
         setBalance(null);
@@ -112,16 +102,12 @@ export function LeavePage() {
         setLoadingBalance(false);
         return;
       }
-
       setHireDate(profile.hire_date);
-
-      // 2. Calculer le total acquis (2 jours par mois complet)
       const hire = new Date(profile.hire_date);
       const now = new Date();
       const monthsWorked = monthsBetween(hire, now);
       const totalEarned = monthsWorked * 2;
 
-      // 3. Récupérer les jours déjà pris (demandes approuvées dans l'année)
       const { data: takenLeaves, error: takenError } = await supabase
         .from("leave_requests")
         .select("duration")
@@ -129,25 +115,21 @@ export function LeavePage() {
         .eq("status", "approved")
         .gte("start_date", `${year}-01-01`)
         .lte("end_date", `${year}-12-31`);
-
       if (takenError) throw takenError;
       const taken = takenLeaves?.reduce((sum, l) => sum + l.duration, 0) || 0;
 
-      // 4. Récupérer les jours supplémentaires
       const { data: balData, error: balError } = await supabase
         .from("leave_balances")
         .select("extra_days")
         .eq("employee_id", user.id)
         .eq("year", year)
         .maybeSingle();
-
       if (balError) throw balError;
       const extraDaysFromDb = balData?.extra_days || 0;
 
       const totalWithExtra = totalEarned + extraDaysFromDb;
       const remaining = totalWithExtra - taken;
 
-      // 5. Mettre à jour leave_balances
       const newBalance = {
         employee_id: user.id,
         year: year,
@@ -157,11 +139,9 @@ export function LeavePage() {
         extra_days: extraDaysFromDb,
         updated_at: new Date().toISOString(),
       };
-
       const { error: upsertError } = await supabase
         .from("leave_balances")
         .upsert(newBalance, { onConflict: "employee_id, year" });
-
       if (upsertError) throw upsertError;
 
       setBalance({
@@ -177,7 +157,6 @@ export function LeavePage() {
     }
   };
 
-  // Mettre à jour la date d'embauche
   const updateHireDate = async () => {
     if (!user) return;
     if (!newHireDate) {
@@ -203,20 +182,17 @@ export function LeavePage() {
     }
   };
 
-  // Charger les demandes
   const fetchLeaves = async () => {
     if (!user) {
       setLoading(false);
       return;
     }
-
     setLoading(true);
     try {
       const { data: leavesData, error: leavesError } = await supabase
         .from("leave_requests")
         .select("*")
         .order("created_at", { ascending: false });
-
       if (leavesError) throw leavesError;
 
       if (!leavesData || leavesData.length === 0) {
@@ -256,7 +232,6 @@ export function LeavePage() {
     }
   };
 
-  // Initialiser le formulaire avec l'utilisateur actuel
   useEffect(() => {
     if (user) {
       setForm((prev) => ({ ...prev, employee_id: user.id }));
@@ -268,7 +243,6 @@ export function LeavePage() {
     fetchBalance();
   }, [user]);
 
-  // Filtrage
   const filtered = leaves.filter(
     (l) => statusFilter === "all" || l.status === statusFilter,
   );
@@ -280,7 +254,6 @@ export function LeavePage() {
     rejected: leaves.filter((l) => l.status === "rejected").length,
   };
 
-  // ----- SOUMISSION -----
   const handleSubmit = async () => {
     if (!form.employee_id) {
       alert("Vous devez être connecté pour demander un congé");
@@ -312,24 +285,17 @@ export function LeavePage() {
     setUploading(!!file);
 
     try {
-      let supportingDocumentUrl: string | null = null;
+      let supportingDocumentPath: string | null = null;
 
       if (file) {
-        const fileExt = file.name.split(".").pop();
+        // ✅ Fix: fileExt supprimé (unused)
         const fileName = `${Date.now()}_${file.name}`;
         const filePath = `leave_documents/${fileName}`;
-
         const { error: uploadError } = await supabase.storage
           .from(BUCKET_NAME)
           .upload(filePath, file);
-
         if (uploadError) throw uploadError;
-
-        const { data: urlData } = supabase.storage
-          .from(BUCKET_NAME)
-          .getPublicUrl(filePath);
-
-        supportingDocumentUrl = urlData.publicUrl;
+        supportingDocumentPath = filePath;
       }
 
       const payload = {
@@ -340,11 +306,10 @@ export function LeavePage() {
         end_date: form.end_date,
         duration: duration,
         status: "submitted",
-        supporting_document: supportingDocumentUrl,
+        supporting_document: supportingDocumentPath,
       };
 
       const { error } = await supabase.from("leave_requests").insert([payload]);
-
       if (error) throw error;
 
       await fetchLeaves();
@@ -359,9 +324,7 @@ export function LeavePage() {
         duration: 1,
       }));
       setFile(null);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
+      if (fileInputRef.current) fileInputRef.current.value = "";
       void addNotification({
         title: "Demande de congé soumise",
         message: "Votre demande de congé a été soumise avec succès.",
@@ -375,7 +338,6 @@ export function LeavePage() {
     }
   };
 
-  // ----- APPROBATION / REJET -----
   const handleApprove = async (id: string) => {
     if (!confirm("Approuver cette demande ?")) return;
     try {
@@ -415,7 +377,6 @@ export function LeavePage() {
     }
   };
 
-  // ----- MODIFICATION -----
   const handleEdit = (leave: LeaveRequest) => {
     setEditingId(leave.id);
     setForm({
@@ -430,7 +391,6 @@ export function LeavePage() {
     setShowRequest(true);
   };
 
-  // ----- MISE À JOUR -----
   const handleUpdate = async () => {
     if (!editingId) return;
     if (!form.employee_id) {
@@ -459,24 +419,17 @@ export function LeavePage() {
     setUploading(!!editingFile);
 
     try {
-      let supportingDocumentUrl: string | null = null;
+      let supportingDocumentPath: string | null = null;
 
       if (editingFile) {
-        const fileExt = editingFile.name.split(".").pop();
+        // ✅ Fix: fileExt supprimé (unused)
         const fileName = `${Date.now()}_${editingFile.name}`;
         const filePath = `leave_documents/${fileName}`;
-
         const { error: uploadError } = await supabase.storage
           .from(BUCKET_NAME)
           .upload(filePath, editingFile);
-
         if (uploadError) throw uploadError;
-
-        const { data: urlData } = supabase.storage
-          .from(BUCKET_NAME)
-          .getPublicUrl(filePath);
-
-        supportingDocumentUrl = urlData.publicUrl;
+        supportingDocumentPath = filePath;
       }
 
       const payload = {
@@ -485,8 +438,8 @@ export function LeavePage() {
         start_date: form.start_date,
         end_date: form.end_date,
         duration: duration,
-        ...(supportingDocumentUrl && {
-          supporting_document: supportingDocumentUrl,
+        ...(supportingDocumentPath && {
+          supporting_document: supportingDocumentPath,
         }),
       };
 
@@ -494,7 +447,6 @@ export function LeavePage() {
         .from("leave_requests")
         .update(payload)
         .eq("id", editingId);
-
       if (error) throw error;
 
       await fetchLeaves();
@@ -524,22 +476,18 @@ export function LeavePage() {
     }
   };
 
-  // ----- SUPPRESSION -----
   const handleDelete = async (id: string, status: string) => {
     if (status !== "submitted") {
       alert("Seules les demandes en attente peuvent être supprimées.");
       return;
     }
     if (!confirm("Supprimer définitivement cette demande de congé ?")) return;
-
     try {
       const { error } = await supabase
         .from("leave_requests")
         .delete()
         .eq("id", id);
-
       if (error) throw error;
-
       await fetchLeaves();
       void addNotification({
         title: "Demande de congé supprimée",
@@ -551,7 +499,6 @@ export function LeavePage() {
     }
   };
 
-  // ----- AJOUT DE JOURS SUPPLÉMENTAIRES -----
   const handleAddExtraDays = async () => {
     if (!user) return;
     if (extraDays <= 0) {
@@ -567,12 +514,9 @@ export function LeavePage() {
         .eq("employee_id", user.id)
         .eq("year", year)
         .maybeSingle();
-
       if (balError) throw balError;
-
       const currentExtra = balData?.extra_days || 0;
       const newExtra = currentExtra + extraDays;
-
       const { error: upsertError } = await supabase
         .from("leave_balances")
         .upsert(
@@ -584,9 +528,7 @@ export function LeavePage() {
           },
           { onConflict: "employee_id, year" },
         );
-
       if (upsertError) throw upsertError;
-
       await fetchBalance();
       setShowAddDaysModal(false);
       setExtraDays(0);
@@ -602,7 +544,6 @@ export function LeavePage() {
     }
   };
 
-  // ----- RENDU DU SOLDE -----
   const renderBalance = () => {
     if (loadingBalance) return "...";
     if (!hireDate) {
@@ -622,7 +563,6 @@ export function LeavePage() {
     return balance?.remaining ?? 0;
   };
 
-  // ----- RENDU PRINCIPAL -----
   return (
     <div className="page-container">
       <PageHeader
@@ -817,7 +757,7 @@ export function LeavePage() {
                   const isOwner = user && leave.employee_id === user.id;
                   const isPending = leave.status === "submitted";
                   const canModify = isOwner && isPending;
-                  const canApproveReject = !isOwner;
+                  // ✅ Fix: canApproveReject supprimé (unused)
 
                   return (
                     <tr
@@ -863,15 +803,11 @@ export function LeavePage() {
                       </td>
                       <td className="px-4 py-3">
                         {leave.supporting_document ? (
-                          <a
-                            href={leave.supporting_document}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-1 text-primary-400 hover:text-primary-300 transition-colors"
-                          >
-                            <FileText className="w-4 h-4" />
-                            <span className="text-xs">Télécharger</span>
-                          </a>
+                          <DocumentLink
+                            filePath={leave.supporting_document}
+                            bucket={BUCKET_NAME}
+                            label="Télécharger"
+                          />
                         ) : (
                           <span className="text-slate-500 text-xs">-</span>
                         )}
@@ -951,9 +887,7 @@ export function LeavePage() {
                 <input
                   type="text"
                   value={
-                    user?.user_metadata?.full_name ||
-                    user?.email ||
-                    "Utilisateur connecté"
+                    user?.full_name || user?.email || "Utilisateur connecté"
                   }
                   className="input-md w-full bg-slate-800/50 cursor-not-allowed"
                   disabled
@@ -1065,7 +999,6 @@ export function LeavePage() {
                   </p>
                 )}
               </div>
-
               <div>
                 <label className="text-xs text-slate-400 mb-1 block">
                   Justificatif (optionnel)
@@ -1075,11 +1008,8 @@ export function LeavePage() {
                   type="file"
                   onChange={(e) => {
                     if (e.target.files && e.target.files[0]) {
-                      if (editingId) {
-                        setEditingFile(e.target.files[0]);
-                      } else {
-                        setFile(e.target.files[0]);
-                      }
+                      if (editingId) setEditingFile(e.target.files[0]);
+                      else setFile(e.target.files[0]);
                     }
                   }}
                   className="input-md w-full"
@@ -1102,7 +1032,6 @@ export function LeavePage() {
                   </p>
                 )}
               </div>
-
               <div className="flex gap-3 pt-2">
                 <button
                   onClick={editingId ? handleUpdate : handleSubmit}
@@ -1134,7 +1063,7 @@ export function LeavePage() {
         </div>
       )}
 
-      {/* MODAL AJOUT DE JOURS SUPPLÉMENTAIRES */}
+      {/* MODAL AJOUT DE JOURS */}
       {showAddDaysModal && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"

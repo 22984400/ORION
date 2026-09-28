@@ -1,41 +1,44 @@
-// src/pages/documents/DocumentsPage.tsx
-
+// src/pages/documentsTravail/DocumentsPage.tsx
 import { useState, useRef, useMemo } from "react";
 import {
   Upload,
-  Download,
   Trash2,
   Search,
   FileText,
   FileSpreadsheet,
   File,
-  FolderOpen,
   List,
   Grid3x3,
 } from "lucide-react";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Badge } from "../../components/ui/Badge";
+import { DocumentLink } from "../../components/DocumentLink";
 import { cn, formatDate, formatNumber } from "../../lib/utils";
 import { addNotification } from "../../lib/notifications";
 import { useSupabaseQuery } from "../../hooks/useSupabaseData";
 import { supabase } from "../../lib/supabase";
-import type { WorkingDocument } from "../../types";
 
-// Ajoutez le type dans src/types/index.ts
-// export interface WorkingDocument {
-//   id: string;
-//   title: string;
-//   description?: string;
-//   category: 'ADMINISTRATIVE' | 'PERMANENT' | 'ANNUAL' | 'FISCAL' | 'SOCIAL' | 'AUDIT';
-//   file_name: string;
-//   file_path: string;
-//   file_size: number;
-//   file_type: string;
-//   uploaded_by?: string;
-//   client_id?: string;
-//   created_at: string;
-//   updated_at: string;
-// }
+// ⭐ Local type (no import needed)
+interface WorkingDocument {
+  id: string;
+  title: string;
+  description?: string;
+  category:
+    | "ADMINISTRATIVE"
+    | "PERMANENT"
+    | "ANNUAL"
+    | "FISCAL"
+    | "SOCIAL"
+    | "AUDIT";
+  file_name: string;
+  file_path: string;
+  file_size: number;
+  file_type: string;
+  uploaded_by?: string;
+  client_id?: string;
+  created_at: string;
+  updated_at?: string;
+}
 
 const CATEGORY_LABELS: Record<string, string> = {
   ADMINISTRATIVE: "Administratif",
@@ -88,7 +91,6 @@ export function DocumentsPage() {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Filtrage
   const filtered = useMemo(() => {
     let result = documents || [];
     if (categoryFilter !== "all") {
@@ -105,7 +107,6 @@ export function DocumentsPage() {
     return result;
   }, [documents, search, categoryFilter]);
 
-  // Upload
   const handleUpload = async () => {
     if (!file) {
       alert("Veuillez sélectionner un fichier");
@@ -122,23 +123,18 @@ export function DocumentsPage() {
       const fileName = `${Date.now()}_${file.name}`;
       const filePath = `documents/${fileName}`;
 
-      // Upload vers Storage
       const { error: uploadError } = await supabase.storage
         .from(BUCKET_NAME)
         .upload(filePath, file);
       if (uploadError) throw uploadError;
 
-      const { data: urlData } = supabase.storage
-        .from(BUCKET_NAME)
-        .getPublicUrl(filePath);
-
-      // Insertion en base
+      // ⭐ Store PATH (not public URL)
       const payload = {
         title: form.title.trim(),
         description: form.description?.trim() || null,
         category: form.category,
         file_name: file.name,
-        file_path: urlData.publicUrl,
+        file_path: filePath,
         file_size: Math.round(file.size / 1024),
         file_type: fileExt || "unknown",
         client_id: form.client_id || null,
@@ -173,11 +169,9 @@ export function DocumentsPage() {
     }
   };
 
-  // Suppression
   const handleDelete = async (doc: WorkingDocument) => {
     if (!confirm(`Supprimer définitivement "${doc.title}" ?`)) return;
     try {
-      // Supprimer le fichier du storage
       if (doc.file_path) {
         const urlParts = doc.file_path.split("/");
         const filePath = urlParts
@@ -187,7 +181,6 @@ export function DocumentsPage() {
           await supabase.storage.from(BUCKET_NAME).remove([filePath]);
         }
       }
-      // Supprimer l'enregistrement
       const { error } = await supabase
         .from("working_documents")
         .delete()
@@ -338,6 +331,7 @@ export function DocumentsPage() {
                       </td>
                       <td className="px-4 py-3">
                         <Badge
+                          variant="neutral"
                           className={cn(
                             "border",
                             CATEGORY_COLORS[doc.category],
@@ -358,16 +352,12 @@ export function DocumentsPage() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
                           {doc.file_path && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                window.open(doc.file_path!, "_blank");
-                              }}
-                              className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-slate-200"
-                              title="Télécharger"
-                            >
-                              <Download className="w-4 h-4" />
-                            </button>
+                            <DocumentLink
+                              filePath={doc.file_path}
+                              bucket={BUCKET_NAME}
+                              label=""
+                              className="p-1.5 rounded hover:bg-slate-700/50"
+                            />
                           )}
                           <button
                             onClick={(e) => {
@@ -408,6 +398,7 @@ export function DocumentsPage() {
                   {doc.title}
                 </h4>
                 <Badge
+                  variant="neutral"
                   className={cn(
                     "border text-xs",
                     CATEGORY_COLORS[doc.category],
@@ -464,6 +455,7 @@ export function DocumentsPage() {
               <div>
                 <p className="text-xs text-slate-400">Catégorie</p>
                 <Badge
+                  variant="neutral"
                   className={cn(
                     "border",
                     CATEGORY_COLORS[selectedDoc.category],
@@ -492,15 +484,12 @@ export function DocumentsPage() {
               </div>
               <div className="flex gap-2 mt-4">
                 {selectedDoc.file_path && (
-                  <button
-                    onClick={() =>
-                      window.open(selectedDoc.file_path!, "_blank")
-                    }
-                    className="btn-primary btn-sm gap-1"
-                  >
-                    <Download className="w-4 h-4" />
-                    Télécharger
-                  </button>
+                  <DocumentLink
+                    filePath={selectedDoc.file_path}
+                    bucket={BUCKET_NAME}
+                    label="Télécharger"
+                    className="btn-primary btn-sm"
+                  />
                 )}
                 <button
                   onClick={() => {

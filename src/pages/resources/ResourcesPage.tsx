@@ -1,9 +1,9 @@
 // src/pages/resources/ResourcesPage.tsx
 import { useState, useRef } from "react";
-import { Upload, FileText, Trash2, Download, FolderOpen } from "lucide-react";
+import { Upload, FileText, Trash2, FolderOpen } from "lucide-react";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Badge } from "../../components/ui/Badge";
-import { cn, formatDate } from "../../lib/utils";
+import { DocumentLink } from "../../components/DocumentLink";
 import { addNotification } from "../../lib/notifications";
 import { useSupabaseQuery } from "../../hooks/useSupabaseData";
 import { supabase } from "../../lib/supabase";
@@ -59,15 +59,12 @@ export function ResourcesPage() {
         .upload(filePath, file);
       if (uploadError) throw uploadError;
 
-      const { data: urlData } = supabase.storage
-        .from(BUCKET_NAME)
-        .getPublicUrl(filePath);
-
+      // ⭐ Store PATH
       const payload = {
         title: title.trim(),
         category,
         file_name: file.name,
-        file_path: urlData.publicUrl,
+        file_path: filePath,
         file_size: Math.round(file.size / 1024),
         file_type: fileExt || "unknown",
       };
@@ -98,7 +95,6 @@ export function ResourcesPage() {
   const handleDelete = async (resource: Resource) => {
     if (!confirm(`Supprimer définitivement "${resource.title}" ?`)) return;
     try {
-      // Supprimer le fichier du storage
       if (resource.file_path) {
         const urlParts = resource.file_path.split("/");
         const filePath = urlParts
@@ -133,7 +129,7 @@ export function ResourcesPage() {
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Widget Règles internes */}
+        {/* Règles */}
         <div className="card p-5">
           <div className="flex items-center gap-2 mb-4">
             <FolderOpen className="w-5 h-5 text-primary-400" />
@@ -174,7 +170,6 @@ export function ResourcesPage() {
                 if (e.target.files && e.target.files[0]) {
                   setFile(e.target.files[0]);
                   setCategory("regles");
-                  // Auto-upload if title is set
                   if (title.trim()) handleUpload();
                 }
               }}
@@ -212,15 +207,12 @@ export function ResourcesPage() {
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     {doc.file_path && (
-                      <a
-                        href={doc.file_path}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-1 rounded hover:bg-slate-700/50 text-slate-400 hover:text-slate-200"
-                        title="Télécharger"
-                      >
-                        <Download className="w-4 h-4" />
-                      </a>
+                      <DocumentLink
+                        filePath={doc.file_path}
+                        bucket={BUCKET_NAME}
+                        label=""
+                        className="p-1 rounded hover:bg-slate-700/50"
+                      />
                     )}
                     <button
                       onClick={() => handleDelete(doc)}
@@ -236,7 +228,7 @@ export function ResourcesPage() {
           </div>
         </div>
 
-        {/* Widget Manuel du cabinet */}
+        {/* Manuel */}
         <div className="card p-5">
           <div className="flex items-center gap-2 mb-4">
             <FolderOpen className="w-5 h-5 text-primary-400" />
@@ -314,15 +306,12 @@ export function ResourcesPage() {
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     {doc.file_path && (
-                      <a
-                        href={doc.file_path}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-1 rounded hover:bg-slate-700/50 text-slate-400 hover:text-slate-200"
-                        title="Télécharger"
-                      >
-                        <Download className="w-4 h-4" />
-                      </a>
+                      <DocumentLink
+                        filePath={doc.file_path}
+                        bucket={BUCKET_NAME}
+                        label=""
+                        className="p-1 rounded hover:bg-slate-700/50"
+                      />
                     )}
                     <button
                       onClick={() => handleDelete(doc)}

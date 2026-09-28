@@ -6,6 +6,8 @@ import { supabase } from "../../lib/supabase";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { useAuth } from "../../contexts/AuthContext";
+import { DocumentLink } from "../../components/DocumentLink";
+import { DocumentImage } from "../../components/DocumentImage";
 
 // ==================== HELPER: SANITIZE FILENAME ====================
 const sanitizeFilename = (name: string) => {
@@ -240,11 +242,9 @@ const AccordionHeader = styled.button<{
   font-weight: 600;
   text-align: left;
   transition: background 0.15s;
-
   &:hover {
     background: #1e293b;
   }
-
   .left {
     display: flex;
     align-items: center;
@@ -254,7 +254,6 @@ const AccordionHeader = styled.button<{
       width: 16px;
     }
   }
-
   .badge {
     font-size: 10px;
     text-transform: uppercase;
@@ -272,7 +271,6 @@ const AccordionHeader = styled.button<{
     background: #fee2e2;
     color: #991b1b;
   }
-
   .right {
     display: flex;
     align-items: center;
@@ -299,12 +297,10 @@ const CheckItem = styled.div<{ $checked: boolean }>`
   background: ${({ $checked }) =>
     $checked ? "rgba(34,197,94,0.08)" : "transparent"};
   transition: background 0.15s;
-
   &:hover {
     background: ${({ $checked }) =>
       $checked ? "rgba(34,197,94,0.12)" : "#1e293b"};
   }
-
   input[type="checkbox"] {
     width: 16px;
     height: 16px;
@@ -312,20 +308,17 @@ const CheckItem = styled.div<{ $checked: boolean }>`
     accent-color: #22c55e;
     flex-shrink: 0;
   }
-
   .label {
     flex: 1;
     font-size: 13px;
     color: ${({ $checked }) => ($checked ? "#22c55e" : "#e2e8f0")};
     text-decoration: ${({ $checked }) => ($checked ? "line-through" : "none")};
   }
-
   .actions {
     display: flex;
     gap: 6px;
     align-items: center;
   }
-
   .link-icon {
     color: #4facfe;
     text-decoration: none;
@@ -337,7 +330,6 @@ const CheckItem = styled.div<{ $checked: boolean }>`
       text-decoration: underline;
     }
   }
-
   .upload-btn {
     padding: 4px 8px;
     background: #334155;
@@ -350,7 +342,18 @@ const CheckItem = styled.div<{ $checked: boolean }>`
       background: #475569;
     }
   }
-
+  .replace-btn {
+    padding: 4px 8px;
+    background: #3b82f6;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
+    &:hover {
+      background: #2563eb;
+    }
+  }
   .del-btn {
     padding: 4px 6px;
     background: transparent;
@@ -597,11 +600,8 @@ const CollaborateurFiche: React.FC = () => {
         .upload(filePath, file);
       if (uploadError) throw uploadError;
 
-      const { data: urlData } = supabase.storage
-        .from("documents")
-        .getPublicUrl(filePath);
-
-      handleChange(field, urlData.publicUrl);
+      // ⭐ Store PATH (not public URL)
+      handleChange(field, filePath);
     } catch (err: any) {
       console.error(err);
       alert(`Erreur upload : ${err.message || "Erreur inconnue"}`);
@@ -635,7 +635,6 @@ const CollaborateurFiche: React.FC = () => {
         },
         { onConflict: "collaborateur_id,item_key" },
       );
-
       if (error) throw error;
     } catch (err: any) {
       console.error("Détails complets :", err);
@@ -664,10 +663,7 @@ const CollaborateurFiche: React.FC = () => {
         .upload(filePath, file);
       if (uploadError) throw uploadError;
 
-      const { data: urlData } = supabase.storage
-        .from("documents")
-        .getPublicUrl(filePath);
-
+      // ⭐ Store PATH (not public URL)
       const { error: dbError } = await supabase
         .from("dossier_collaborateur")
         .upsert(
@@ -675,7 +671,7 @@ const CollaborateurFiche: React.FC = () => {
             collaborateur_id: id,
             item_key: itemKey,
             checked: true,
-            document_url: urlData.publicUrl,
+            document_url: filePath,
           },
           { onConflict: "collaborateur_id,item_key" },
         );
@@ -687,7 +683,7 @@ const CollaborateurFiche: React.FC = () => {
         [itemKey]: {
           item_key: itemKey,
           checked: true,
-          document_url: urlData.publicUrl,
+          document_url: filePath,
         },
       });
 
@@ -696,6 +692,76 @@ const CollaborateurFiche: React.FC = () => {
       console.error("Détails de l'erreur :", err);
       alert(
         `Erreur d'upload : ${err.message || err.details || "Erreur inconnue"}`,
+      );
+    }
+  };
+
+  // ⭐ NEW: Remplacer un document existant
+  const handleDossierReplace = async (itemKey: string, file: File) => {
+    if (isNew) {
+      alert("Veuillez d'abord enregistrer le collaborateur.");
+      return;
+    }
+
+    if (!window.confirm("Remplacer le document existant par le nouveau ?")) {
+      return;
+    }
+
+    try {
+      const fileExt = file.name.split(".").pop();
+      const baseName = file.name.substring(0, file.name.lastIndexOf("."));
+      const cleanName = sanitizeFilename(baseName);
+      const fileName = `${id}_${itemKey}_${Date.now()}_${cleanName}.${fileExt}`;
+      const filePath = `dossiers/${fileName}`;
+
+      // 1. Upload nouveau fichier
+      const { error: uploadError } = await supabase.storage
+        .from("documents")
+        .upload(filePath, file);
+      if (uploadError) throw uploadError;
+
+      // 2. Supprimer l'ancien fichier (best effort)
+      const oldPath = dossier[itemKey]?.document_url;
+      if (oldPath) {
+        try {
+          const cleanOldPath = oldPath.includes("/object/")
+            ? oldPath.split("/object/").pop()!.split("/").slice(1).join("/")
+            : oldPath;
+          await supabase.storage.from("documents").remove([cleanOldPath]);
+        } catch (delErr) {
+          console.warn("Impossible de supprimer l'ancien fichier:", delErr);
+        }
+      }
+
+      // 3. Mettre à jour la base
+      const { error: dbError } = await supabase
+        .from("dossier_collaborateur")
+        .upsert(
+          {
+            collaborateur_id: id,
+            item_key: itemKey,
+            checked: true,
+            document_url: filePath,
+          },
+          { onConflict: "collaborateur_id,item_key" },
+        );
+      if (dbError) throw dbError;
+
+      // 4. Mettre à jour l'état local
+      setDossier({
+        ...dossier,
+        [itemKey]: {
+          item_key: itemKey,
+          checked: true,
+          document_url: filePath,
+        },
+      });
+
+      alert("Document remplacé avec succès !");
+    } catch (err: any) {
+      console.error("Détails de l'erreur :", err);
+      alert(
+        `Erreur de remplacement : ${err.message || err.details || "Erreur inconnue"}`,
       );
     }
   };
@@ -821,7 +887,11 @@ const CollaborateurFiche: React.FC = () => {
           <PhotoSection>
             <PhotoPreview>
               {collaborateur.photo_url ? (
-                <img src={collaborateur.photo_url} alt="Photo" />
+                <DocumentImage
+                  filePath={collaborateur.photo_url}
+                  bucket="documents"
+                  alt="Photo de profil"
+                />
               ) : (
                 <span className="placeholder">
                   <i className="fas fa-user-circle"></i>
@@ -1003,10 +1073,7 @@ const CollaborateurFiche: React.FC = () => {
                   $confidential={cat.confidential}
                   type="button"
                   onClick={() =>
-                    setOpenAccordions({
-                      ...openAccordions,
-                      [cat.id]: !isOpen,
-                    })
+                    setOpenAccordions({ ...openAccordions, [cat.id]: !isOpen })
                   }
                 >
                   <div className="left">
@@ -1036,6 +1103,7 @@ const CollaborateurFiche: React.FC = () => {
                       document_url: null,
                     };
                     const fileInputId = `file_${item.key}`;
+                    const replaceInputId = `replace_${item.key}`;
 
                     return (
                       <CheckItem key={item.key} $checked={itemState.checked}>
@@ -1048,14 +1116,43 @@ const CollaborateurFiche: React.FC = () => {
                         <div className="actions">
                           {itemState.document_url ? (
                             <>
-                              <a
-                                href={itemState.document_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
+                              {/* Voir */}
+                              <DocumentLink
+                                filePath={itemState.document_url}
+                                bucket="documents"
+                                label="Voir"
                                 className="link-icon"
+                              />
+
+                              {/* ⭐ NOUVEAU : Remplacer */}
+                              <input
+                                type="file"
+                                id={replaceInputId}
+                                style={{ display: "none" }}
+                                onChange={(e) => {
+                                  if (e.target.files?.[0]) {
+                                    handleDossierReplace(
+                                      item.key,
+                                      e.target.files[0],
+                                    );
+                                    e.target.value = "";
+                                  }
+                                }}
+                              />
+                              <button
+                                type="button"
+                                className="replace-btn"
+                                onClick={() =>
+                                  document
+                                    .getElementById(replaceInputId)
+                                    ?.click()
+                                }
+                                title="Remplacer le document"
                               >
-                                <i className="fas fa-paperclip"></i> Voir
-                              </a>
+                                <i className="fas fa-sync-alt"></i> Remplacer
+                              </button>
+
+                              {/* Supprimer */}
                               <button
                                 type="button"
                                 className="del-btn"
@@ -1072,11 +1169,13 @@ const CollaborateurFiche: React.FC = () => {
                                 id={fileInputId}
                                 style={{ display: "none" }}
                                 onChange={(e) => {
-                                  if (e.target.files?.[0])
+                                  if (e.target.files?.[0]) {
                                     handleDossierUpload(
                                       item.key,
                                       e.target.files[0],
                                     );
+                                    e.target.value = "";
+                                  }
                                 }}
                               />
                               <button

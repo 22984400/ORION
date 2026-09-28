@@ -1,28 +1,39 @@
 // src/pages/working-papers/WorkingPapersPage.tsx
-
 import { useMemo, useState, useRef } from "react";
 import {
-  Download,
   Upload,
   FileText,
   FileSpreadsheet,
   File,
   List,
   Grid3x3,
-  FolderOpen,
   Trash2,
 } from "lucide-react";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Badge } from "../../components/ui/Badge";
+import { DocumentLink } from "../../components/DocumentLink";
 import { cn, formatDate, formatNumber } from "../../lib/utils";
 import { addNotification } from "../../lib/notifications";
 import { useSupabaseQuery } from "../../hooks/useSupabaseData";
 import { supabase } from "../../lib/supabase";
-import type { WorkingPaper } from "../../types";
+
+// ⭐ Local type (self-contained, no import needed)
+interface WorkingPaper {
+  id: string;
+  name: string;
+  category: string;
+  reference: string;
+  status: string;
+  file_type: string;
+  file_size: number;
+  file_path: string;
+  version: number;
+  created_at: string;
+  updated_at?: string;
+}
 
 const BUCKET_NAME = "working-papers";
 
-// === Définition des catégories ===
 const CATEGORIES = [
   {
     value: "ADMINISTRATIVE",
@@ -66,7 +77,7 @@ const CATEGORY_COLORS = CATEGORIES.reduce(
 );
 
 function getFileIcon(type: string) {
-  const lowerType = type.toLowerCase();
+  const lowerType = type?.toLowerCase() || "";
   if (lowerType === "xlsx" || lowerType === "xls") return FileSpreadsheet;
   if (lowerType === "pdf") return FileText;
   return File;
@@ -93,7 +104,6 @@ export function WorkingPapersPage() {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Filtrer par catégorie
   const filtered = useMemo(() => {
     let result = papers || [];
     if (selectedCategory) {
@@ -102,7 +112,6 @@ export function WorkingPapersPage() {
     return result;
   }, [papers, selectedCategory]);
 
-  // Compter par catégorie
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     CATEGORIES.forEach((c) => (counts[c.value] = 0));
@@ -134,14 +143,7 @@ export function WorkingPapersPage() {
       const { error: uploadError } = await supabase.storage
         .from(BUCKET_NAME)
         .upload(filePath, file);
-
       if (uploadError) throw uploadError;
-
-      const { data: urlData } = supabase.storage
-        .from(BUCKET_NAME)
-        .getPublicUrl(filePath);
-
-      const fileUrl = urlData.publicUrl;
 
       const payload = {
         name: form.name.trim(),
@@ -150,14 +152,13 @@ export function WorkingPapersPage() {
         status: form.status,
         file_type: fileExt || "unknown",
         file_size: Math.round(file.size / 1024),
-        file_path: fileUrl,
+        file_path: filePath,
         version: 1,
       };
 
       const { error: insertError } = await supabase
         .from("working_papers")
         .insert([payload]);
-
       if (insertError) throw insertError;
 
       await refetch();
@@ -186,7 +187,6 @@ export function WorkingPapersPage() {
   const handleDelete = async (paper: WorkingPaper) => {
     if (!confirm(`Supprimer définitivement "${paper.name}" ?`)) return;
     try {
-      // Supprimer le fichier du storage
       if (paper.file_path) {
         const urlParts = paper.file_path.split("/");
         const filePath = urlParts
@@ -229,7 +229,6 @@ export function WorkingPapersPage() {
         }
       />
 
-      {/* Filtres par catégorie */}
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <span className="text-xs text-slate-400 font-medium mr-2">
           Catégories :
@@ -296,7 +295,6 @@ export function WorkingPapersPage() {
         </div>
       </div>
 
-      {/* Liste */}
       {viewMode === "list" ? (
         <div className="card overflow-hidden">
           <div className="overflow-x-auto">
@@ -351,7 +349,11 @@ export function WorkingPapersPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <Badge className={cn("border", categoryColor)}>
+                        {/* ⭐ FIX: variant ajouté */}
+                        <Badge
+                          variant="neutral"
+                          className={cn("border", categoryColor)}
+                        >
                           {categoryLabel}
                         </Badge>
                       </td>
@@ -379,16 +381,12 @@ export function WorkingPapersPage() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
                           {paper.file_path && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                window.open(paper.file_path!, "_blank");
-                              }}
-                              className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-slate-200"
-                              title="Télécharger"
-                            >
-                              <Download className="w-4 h-4" />
-                            </button>
+                            <DocumentLink
+                              filePath={paper.file_path}
+                              bucket={BUCKET_NAME}
+                              label=""
+                              className="p-1.5 rounded hover:bg-slate-700/50"
+                            />
                           )}
                           <button
                             onClick={(e) => {
@@ -434,7 +432,11 @@ export function WorkingPapersPage() {
                 <h4 className="text-sm font-medium text-slate-100 mb-1 truncate">
                   {paper.name}
                 </h4>
-                <Badge className={cn("border text-xs", categoryColor)}>
+                {/* ⭐ FIX: variant ajouté */}
+                <Badge
+                  variant="neutral"
+                  className={cn("border text-xs", categoryColor)}
+                >
                   {categoryLabel}
                 </Badge>
                 <div className="flex items-center gap-2 mt-2">
@@ -464,7 +466,6 @@ export function WorkingPapersPage() {
         </div>
       )}
 
-      {/* Modal détail */}
       {showDetail && selectedPaper && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
@@ -488,7 +489,9 @@ export function WorkingPapersPage() {
             <div className="space-y-3">
               <div>
                 <p className="text-xs text-slate-400">Catégorie</p>
+                {/* ⭐ FIX: variant ajouté */}
                 <Badge
+                  variant="neutral"
                   className={cn(
                     "border",
                     CATEGORY_COLORS[
@@ -537,15 +540,12 @@ export function WorkingPapersPage() {
               </div>
               <div className="flex gap-2 mt-4">
                 {selectedPaper.file_path && (
-                  <button
-                    onClick={() =>
-                      window.open(selectedPaper.file_path!, "_blank")
-                    }
-                    className="btn-primary btn-sm gap-1"
-                  >
-                    <Download className="w-4 h-4" />
-                    Télécharger
-                  </button>
+                  <DocumentLink
+                    filePath={selectedPaper.file_path}
+                    bucket={BUCKET_NAME}
+                    label="Télécharger"
+                    className="btn-primary btn-sm"
+                  />
                 )}
                 <button
                   onClick={() => {
@@ -563,7 +563,6 @@ export function WorkingPapersPage() {
         </div>
       )}
 
-      {/* Modal upload */}
       {showUpload && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"

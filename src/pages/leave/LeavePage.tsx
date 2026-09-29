@@ -23,7 +23,7 @@ import { LEAVE_TYPE_LABELS } from "../../lib/constants";
 import { useAuth } from "../../contexts/AuthContext";
 import type { LeaveRequest } from "../../types";
 import { ProtectedAction } from "../../components/auth/ProtectedAction";
-import { buildAccessFilter } from "../../lib/permissions";
+import { buildAccessFilter } from "../../lib/permissions"; // ✅ IMPORT CRUCIAL
 
 const BUCKET_NAME = "leave_documents";
 
@@ -183,6 +183,7 @@ export function LeavePage() {
     }
   };
 
+  // ✅ FILTRE ROW-LEVEL APPLIQUÉ ICI
   const fetchLeaves = async () => {
     if (!user) {
       setLoading(false);
@@ -190,12 +191,11 @@ export function LeavePage() {
     }
     setLoading(true);
     try {
-      // ✅ Row-level filter: user only sees own leave requests (unless HR/manager)
       const accessFilter = buildAccessFilter({
         role: profile?.role,
         module: "conges",
         currentUserId: user.id,
-        ownerColumn: "employee_id",
+        ownerColumn: "employee_id", // ← filtre sur la bonne colonne
       });
 
       let q = supabase
@@ -203,7 +203,10 @@ export function LeavePage() {
         .select("*")
         .order("created_at", { ascending: false });
 
-      if (accessFilter) q = q.or(accessFilter);
+      // ✅ APPLICATION DU FILTRE
+      if (accessFilter) {
+        q = q.or(accessFilter);
+      }
 
       const { data: leavesData, error: leavesError } = await q;
       if (leavesError) throw leavesError;
@@ -256,7 +259,7 @@ export function LeavePage() {
       fetchLeaves();
       fetchBalance();
     }
-  }, [user, profile?.role]);
+  }, [user, profile?.role]); // ✅ re-fetch quand le rôle change
 
   const filtered = leaves.filter(
     (l) => statusFilter === "all" || l.status === statusFilter,

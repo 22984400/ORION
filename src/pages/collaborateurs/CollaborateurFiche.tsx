@@ -9,7 +9,8 @@ import { useAuth } from "../../contexts/AuthContext";
 import { DocumentLink } from "../../components/DocumentLink";
 import { DocumentImage } from "../../components/DocumentImage";
 import { ProtectedAction } from "../../components/auth/ProtectedAction";
-import { canAccessRecordSafe } from "../../lib/permissions"; // ✅ ADDED
+import { canAccessRecordSafe } from "../../lib/permissions";
+import { usePermission } from "../../hooks/usePermission";
 
 // ==================== HELPER: SANITIZE FILENAME ====================
 const sanitizeFilename = (name: string) => {
@@ -35,6 +36,7 @@ const Header = styled.div`
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
+  gap: 12px;
   margin-bottom: 20px;
   padding-bottom: 12px;
   border-bottom: 2px solid #1e293b;
@@ -172,6 +174,9 @@ const Button = styled.button<{
   font-size: 12px;
   cursor: pointer;
   transition: background 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   ${({ variant }) => {
     if (variant === "primary")
       return "background: #4facfe; color: #fff; &:hover { background: #3b8edb; }";
@@ -216,6 +221,72 @@ const LoadingContainer = styled.div`
   text-align: center;
   padding: 3rem;
   color: #94a3b8;
+`;
+
+const AccessDeniedContainer = styled.div`
+  background: #0f172a;
+  border-radius: 16px;
+  padding: 60px 28px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  border: 1px solid #1e293b;
+  color: #e2e8f0;
+  text-align: center;
+  max-width: 600px;
+  margin: 40px auto;
+`;
+
+const AccessDeniedIcon = styled.div`
+  font-size: 64px;
+  color: #fca5a5;
+  margin-bottom: 20px;
+`;
+
+const AccessDeniedTitle = styled.h2`
+  font-size: 22px;
+  font-weight: 700;
+  color: #e2e8f0;
+  margin-bottom: 12px;
+`;
+
+const AccessDeniedText = styled.p`
+  font-size: 14px;
+  color: #94a3b8;
+  margin-bottom: 8px;
+  line-height: 1.6;
+  strong {
+    color: #e2e8f0;
+  }
+`;
+
+const ArchiveBanner = styled.div`
+  padding: 14px 18px;
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid #fbbf24;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #fbbf24;
+  font-size: 14px;
+
+  .icon {
+    font-size: 20px;
+  }
+
+  .content {
+    flex: 1;
+  }
+
+  .title {
+    font-weight: 700;
+  }
+
+  .sub {
+    font-size: 12px;
+    color: #fcd34d;
+    margin-top: 4px;
+  }
 `;
 
 // ==================== DOSSIER STYLES ====================
@@ -423,6 +494,11 @@ interface Collaborateur {
   bureau: string;
   date_embauche: string;
   date_depart: string;
+  // ✅ Champs d'archivage
+  archived?: boolean;
+  archived_at?: string | null;
+  archived_by?: string | null;
+  archive_reason?: string | null;
 }
 
 interface Score {
@@ -549,14 +625,18 @@ const CollaborateurFiche: React.FC = () => {
   const { user, profile } = useAuth();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { can, role } = usePermission();
   const isNew = id === "new" || !id;
+
+  const canViewCollaborateurs = can("collaborateurs", "view");
+  const canCreateCollaborateurs = can("collaborateurs", "create");
 
   const [collaborateur, setCollaborateur] = useState<Partial<Collaborateur>>(
     {},
   );
   const [scores, setScores] = useState<Score[]>([]);
   const [dossier, setDossier] = useState<Record<string, DossierItem>>({});
-  const [accessDenied, setAccessDenied] = useState(false); // ✅ ADDED
+  const [accessDenied, setAccessDenied] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -580,7 +660,6 @@ const CollaborateurFiche: React.FC = () => {
       setLoading(true);
       setAccessDenied(false);
 
-      // ✅ ROW-LEVEL ACCESS CHECK
       const canAccess = canAccessRecordSafe({
         role: profile?.role,
         module: "collaborateurs",
@@ -839,6 +918,90 @@ const CollaborateurFiche: React.FC = () => {
     }
   };
 
+  // ============ ARCHIVER / RESTAURER ============
+  const handleArchive = async () => {
+    if (isNew) return;
+
+    const reason = window.prompt(
+      "Raison de l'archivage (optionnel) :\n\n" +
+        "Ex: Démission, Fin de contrat, Retraite, Autre...",
+      "",
+    );
+
+    if (reason === null) return;
+
+    if (
+      !window.confirm(
+        `Archiver "${collaborateur.prenom} ${collaborateur.nom}" ?\n\n` +
+          `Le collaborateur disparaîtra de la liste active, ` +
+          `mais toutes ses données seront conservées.`,
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setSaving(true);
+
+      const { error } = await supabase
+        .from("collaborateurs")
+        .update({
+          archived: true,
+          archived_at: new Date().toISOString(),
+          archived_by: user?.id || null,
+          archive_reason: reason || null,
+        })
+        .eq("id", id);
+
+      if (error) throw error;
+
+      alert("Collaborateur archivé avec succès.");
+      navigate("/collaborateurs");
+    } catch (err: any) {
+      console.error(err);
+      alert("Erreur lors de l'archivage : " + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRestore = async () => {
+    if (isNew) return;
+
+    if (
+      !window.confirm(
+        `Restaurer "${collaborateur.prenom} ${collaborateur.nom}" ?\n\n` +
+          `Le collaborateur réapparaîtra dans la liste active.`,
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setSaving(true);
+
+      const { error } = await supabase
+        .from("collaborateurs")
+        .update({
+          archived: false,
+          archived_at: null,
+          archived_by: null,
+          archive_reason: null,
+        })
+        .eq("id", id);
+
+      if (error) throw error;
+
+      alert("Collaborateur restauré avec succès.");
+      loadData();
+    } catch (err: any) {
+      console.error(err);
+      alert("Erreur lors de la restauration : " + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // ============ SAVE COLLABORATEUR ============
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -905,52 +1068,82 @@ const CollaborateurFiche: React.FC = () => {
     );
   }
 
-  // ✅ ACCESS DENIED SCREEN
+  // ✅ ACCESS DENIED — Utilisateur non autorisé à VOIR les collaborateurs
+  if (!canViewCollaborateurs && !isNew) {
+    return (
+      <AccessDeniedContainer>
+        <AccessDeniedIcon>
+          <i className="fas fa-user-lock"></i>
+        </AccessDeniedIcon>
+        <AccessDeniedTitle>Accès refusé</AccessDeniedTitle>
+        <AccessDeniedText>
+          Votre rôle actuel (<strong>"{role || "inconnu"}"</strong>) ne vous
+          permet pas de consulter les informations des collaborateurs.
+        </AccessDeniedText>
+        <AccessDeniedText>
+          Veuillez contacter votre administrateur si vous pensez qu'il s'agit
+          d'une erreur.
+        </AccessDeniedText>
+        <Button
+          variant="primary"
+          onClick={() => navigate("/collaborateurs")}
+          style={{ marginTop: 24, padding: "10px 24px", fontSize: 14 }}
+        >
+          <i className="fas fa-arrow-left"></i> Retour
+        </Button>
+      </AccessDeniedContainer>
+    );
+  }
+
+  // ✅ ACCESS DENIED — Utilisateur non autorisé à CRÉER un collaborateur
+  if (isNew && !canCreateCollaborateurs) {
+    return (
+      <AccessDeniedContainer>
+        <AccessDeniedIcon>
+          <i className="fas fa-user-plus"></i>
+        </AccessDeniedIcon>
+        <AccessDeniedTitle>
+          Vous ne pouvez pas créer de collaborateur
+        </AccessDeniedTitle>
+        <AccessDeniedText>
+          Votre rôle actuel (<strong>"{role || "inconnu"}"</strong>) ne vous
+          permet pas de créer un collaborateur.
+        </AccessDeniedText>
+        <AccessDeniedText>
+          Veuillez contacter votre administrateur si vous pensez qu'il s'agit
+          d'une erreur.
+        </AccessDeniedText>
+        <Button
+          variant="primary"
+          onClick={() => navigate("/collaborateurs")}
+          style={{ marginTop: 24, padding: "10px 24px", fontSize: 14 }}
+        >
+          <i className="fas fa-arrow-left"></i> Retour
+        </Button>
+      </AccessDeniedContainer>
+    );
+  }
+
+  // ✅ ACCESS DENIED — Détecté par canAccessRecordSafe
   if (accessDenied) {
     return (
-      <Container>
-        <Header>
-          <HeaderTitle>
-            <i className="fas fa-lock"></i> Accès refusé
-          </HeaderTitle>
-        </Header>
-        <Section>
-          <div
-            style={{
-              textAlign: "center",
-              padding: "40px 20px",
-              color: "#fca5a5",
-            }}
-          >
-            <i
-              className="fas fa-user-lock"
-              style={{ fontSize: "48px", marginBottom: "16px" }}
-            ></i>
-            <h3 style={{ fontSize: "18px", marginBottom: "8px" }}>
-              Vous n'avez pas accès à ce profil
-            </h3>
-            <p style={{ fontSize: "14px", color: "#94a3b8" }}>
-              Votre rôle ne vous permet pas de consulter les informations
-              d'autres collaborateurs.
-            </p>
-            <button
-              onClick={() => navigate("/collaborateurs")}
-              style={{
-                marginTop: "20px",
-                padding: "10px 20px",
-                background: "#4facfe",
-                color: "#fff",
-                border: "none",
-                borderRadius: "6px",
-                cursor: "pointer",
-                fontWeight: "600",
-              }}
-            >
-              <i className="fas fa-arrow-left"></i> Retour à la liste
-            </button>
-          </div>
-        </Section>
-      </Container>
+      <AccessDeniedContainer>
+        <AccessDeniedIcon>
+          <i className="fas fa-user-lock"></i>
+        </AccessDeniedIcon>
+        <AccessDeniedTitle>Vous n'avez pas accès à ce profil</AccessDeniedTitle>
+        <AccessDeniedText>
+          Votre rôle ne vous permet pas de consulter les informations de ce
+          collaborateur.
+        </AccessDeniedText>
+        <Button
+          variant="primary"
+          onClick={() => navigate("/collaborateurs")}
+          style={{ marginTop: 24, padding: "10px 24px", fontSize: 14 }}
+        >
+          <i className="fas fa-arrow-left"></i> Retour
+        </Button>
+      </AccessDeniedContainer>
     );
   }
 
@@ -963,13 +1156,41 @@ const CollaborateurFiche: React.FC = () => {
             ? "Nouveau collaborateur"
             : `${collaborateur.prenom || ""} ${collaborateur.nom || ""}`}
         </HeaderTitle>
-        <div style={{ display: "flex", gap: "8px" }}>
+        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
           <Button
             variant="secondary"
             onClick={() => navigate("/collaborateurs")}
           >
             <i className="fas fa-arrow-left"></i> Retour
           </Button>
+
+          {/* ✅ Bouton Archiver / Restaurer */}
+          {!isNew &&
+            (collaborateur.archived ? (
+              <ProtectedAction module="collaborateurs" action="edit">
+                <Button
+                  variant="success"
+                  onClick={handleRestore}
+                  disabled={saving}
+                  title="Restaurer ce collaborateur"
+                >
+                  <i className="fas fa-undo"></i> {saving ? "..." : "Restaurer"}
+                </Button>
+              </ProtectedAction>
+            ) : (
+              <ProtectedAction module="collaborateurs" action="delete">
+                <Button
+                  variant="danger"
+                  onClick={handleArchive}
+                  disabled={saving}
+                  title="Archiver ce collaborateur (les données sont conservées)"
+                >
+                  <i className="fas fa-archive"></i>{" "}
+                  {saving ? "..." : "Archiver"}
+                </Button>
+              </ProtectedAction>
+            ))}
+
           <ProtectedAction
             module="collaborateurs"
             action={isNew ? "create" : "edit"}
@@ -980,6 +1201,38 @@ const CollaborateurFiche: React.FC = () => {
           </ProtectedAction>
         </div>
       </Header>
+
+      {/* ✅ Bandeau si le collaborateur est archivé */}
+      {!isNew && collaborateur.archived && (
+        <ArchiveBanner>
+          <i className="fas fa-archive icon"></i>
+          <div className="content">
+            <div className="title">Ce collaborateur est archivé</div>
+            <div className="sub">
+              Archivé le{" "}
+              {collaborateur.archived_at
+                ? format(
+                    new Date(collaborateur.archived_at),
+                    "dd/MM/yyyy à HH:mm",
+                  )
+                : "—"}
+              {collaborateur.archive_reason && (
+                <> — Raison : {collaborateur.archive_reason}</>
+              )}
+            </div>
+          </div>
+          <ProtectedAction module="collaborateurs" action="edit">
+            <Button
+              variant="success"
+              onClick={handleRestore}
+              disabled={saving}
+              style={{ fontSize: "12px" }}
+            >
+              <i className="fas fa-undo"></i> Restaurer
+            </Button>
+          </ProtectedAction>
+        </ArchiveBanner>
+      )}
 
       <form onSubmit={handleSubmit}>
         {/* ===== PERSONNELLE ===== */}
@@ -1236,12 +1489,22 @@ const CollaborateurFiche: React.FC = () => {
                         <div className="actions">
                           {itemState.document_url ? (
                             <>
-                              <DocumentLink
-                                filePath={itemState.document_url}
-                                bucket="documents"
-                                label="Voir"
-                                className="link-icon"
-                              />
+                              {/* ✅ WRAPPED: Voir le document */}
+                              <ProtectedAction
+                                module={
+                                  cat.confidential
+                                    ? "collaborateur_hr"
+                                    : "collaborateur_documents"
+                                }
+                                action="view"
+                              >
+                                <DocumentLink
+                                  filePath={itemState.document_url}
+                                  bucket="documents"
+                                  label="Voir"
+                                  className="link-icon"
+                                />
+                              </ProtectedAction>
                               <input
                                 type="file"
                                 id={replaceInputId}

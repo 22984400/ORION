@@ -43,6 +43,24 @@ export type StockStatus = 'in_stock' | 'low_stock' | 'out_of_stock';
 
 export type DocumentCategory = 'ADMINISTRATIVE' | 'PERMANENT' | 'ANNUAL' | 'FISCAL' | 'SOCIAL' | 'AUDIT';
 
+// ✅ ADDED — Profile interface (was missing, causing TS2305)
+export interface Profile {
+  id: string;
+  email?: string;
+  full_name?: string;
+  first_name?: string;
+  last_name?: string;
+  role?: UserRole | string;
+  active?: boolean;
+  hire_date?: string;
+  initials?: string;
+  avatar_url?: string;
+  department?: string;
+  phone?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface User {
   [key: string]: unknown;
   id: string;
@@ -55,8 +73,8 @@ export interface User {
   created_at: string;
 }
 
+// ✅ FIXED — removed `[key: string]: unknown` (was causing `{}` errors)
 export interface Client {
-  [key: string]: unknown;
   id: string;
   name: string;
   industry?: string;
@@ -88,8 +106,8 @@ export interface Engagement {
   created_at: string;
 }
 
+// ✅ FIXED — removed `[key: string]: unknown` (was causing `{}` errors on subject/objective/comments)
 export interface WeeklyMission {
-  [key: string]: unknown;
   id: string;
   date: string;
   client_id: string | null;
@@ -102,6 +120,8 @@ export interface WeeklyMission {
   status: 'open' | 'closed' | 'postponed';
   progress: number;
   comments: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
   created_at: string;
 }
 
@@ -133,7 +153,7 @@ export interface Finding {
   target_date?: string;
   created_by?: string;
   created_at: string;
-  updated_at: string;
+  updated_at?: string;
 }
 
 // ✅ WorkingPaper — déclaration UNIQUE (les 2 versions fusionnées)
@@ -336,6 +356,3 @@ export interface EtablissementFormData {
   date_ouverture: string;
   is_active: boolean;
 }
-
-// ⚠️ NE PAS redéclarer WorkingPaper ici — il est déjà déclaré plus haut (ligne ~115)
-// La duplication causait les erreurs TS 2687 et 2717.

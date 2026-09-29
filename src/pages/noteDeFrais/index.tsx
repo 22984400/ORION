@@ -4,6 +4,7 @@ import styled from "styled-components";
 import { NoteDeFraisList } from "./NoteDeFraisList";
 import { NoteDeFraisForm } from "./NoteDeFraisForm";
 import { NoteDeFraisDashboard } from "./NoteDeFraisDashboard";
+import { ProtectedAction } from "../../components/auth/ProtectedAction"; // ✅ ADDED
 
 // ==================== STYLES ====================
 const Container = styled.div`
@@ -122,15 +123,18 @@ const NoteDeFrais: React.FC = () => {
         >
           <i className="fas fa-list"></i> Mes notes
         </TabButton>
-        <TabButton
-          $active={activeTab === "nouveau"}
-          onClick={() => {
-            setSelectedReportId(null);
-            setActiveTab("nouveau");
-          }}
-        >
-          <i className="fas fa-plus"></i> Nouvelle note
-        </TabButton>
+        {/* ✅ WRAPPED: "Nouvelle note" tab requires create permission */}
+        <ProtectedAction module="notes_frais" action="create">
+          <TabButton
+            $active={activeTab === "nouveau"}
+            onClick={() => {
+              setSelectedReportId(null);
+              setActiveTab("nouveau");
+            }}
+          >
+            <i className="fas fa-plus"></i> Nouvelle note
+          </TabButton>
+        </ProtectedAction>
         <TabButton
           $active={activeTab === "dashboard"}
           onClick={() => setActiveTab("dashboard")}

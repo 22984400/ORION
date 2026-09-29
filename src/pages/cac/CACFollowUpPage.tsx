@@ -28,6 +28,7 @@ import {
   Cell,
   Legend,
 } from "recharts";
+import { ProtectedAction } from "../../components/auth/ProtectedAction"; // ✅ ADDED
 
 // ----- Types -----
 type Task = {
@@ -85,14 +86,12 @@ export default function CACFollowUpPage() {
   const cellKey = (taskId: string, clientId: string) =>
     `${taskId}__${clientId}`;
 
-  // Chargement des données
   const load = useCallback(async () => {
     if (!user) {
       setLoading(false);
       return;
     }
 
-    // ✅ Vérification que le pays est disponible
     if (!selectedCountry?.code) {
       setLoading(false);
       setError("Pays non sélectionné.");
@@ -103,7 +102,6 @@ export default function CACFollowUpPage() {
     setError(null);
 
     try {
-      // 1. Tâches
       const { data: taskData, error: taskError } = await supabase
         .from("audit_tasks")
         .select("*")
@@ -119,7 +117,6 @@ export default function CACFollowUpPage() {
       }
       setTasks((taskData || []) as Task[]);
 
-      // 2. Membres d'équipe
       const { data: members, error: membersError } = await supabase
         .from("profiles")
         .select("full_name")
@@ -128,15 +125,13 @@ export default function CACFollowUpPage() {
 
       if (membersError) {
         console.error("❌ Erreur chargement membres :", membersError);
-        // non bloquant, on continue
       }
       setTeamMembers((members || []) as TeamMember[]);
 
-      // 3. Clients (avec filtre pays en dur : "CMR")
       const { data: clientData, error: clientError } = await supabase
         .from("clients")
         .select("id, name, client_code")
-        .eq("country", "CMR") // ✅ Correction : "CMR" au lieu de selectedCountry.code
+        .eq("country", "CMR")
         .order("client_code");
 
       if (clientError) {
@@ -149,8 +144,6 @@ export default function CACFollowUpPage() {
       console.log("✅ Clients chargés :", clientData?.length);
       setAllClients((clientData || []) as ClientInfo[]);
 
-      // 4. Récupération des clients sauvegardés dans localStorage
-      // On utilise "CMR" pour la clé (car pays fixe)
       const storageKey = `cac_clients_CMR_${missionTypeId}`;
       const savedIds: string[] = JSON.parse(
         localStorage.getItem(storageKey) || "[]",
@@ -166,7 +159,6 @@ export default function CACFollowUpPage() {
       );
       setSelectedClients(activeClients);
 
-      // 5. Assignations (si clients et tâches existent)
       if (clientIds.length > 0 && (taskData || []).length > 0) {
         const { data: assignData, error: assignError } = await supabase
           .from("audit_mission_assignments")
@@ -195,7 +187,6 @@ export default function CACFollowUpPage() {
           };
         }
 
-        // Création des assignations manquantes
         const existingKeys = new Set(Object.keys(map));
         const missing: { client_id: string; task_id: string }[] = [];
         for (const cId of clientIds) {
@@ -262,11 +253,9 @@ export default function CACFollowUpPage() {
     load();
   }, [load]);
 
-  // ----- Gestionnaires -----
   function addClient(client: ClientInfo) {
     setSelectedClients((prev) => {
       const next = [...prev, client];
-      // Utiliser "CMR" fixe pour la clé
       const storageKey = `cac_clients_CMR_${missionTypeId}`;
       localStorage.setItem(storageKey, JSON.stringify(next.map((c) => c.id)));
       return next;
@@ -343,7 +332,6 @@ export default function CACFollowUpPage() {
     }
   }
 
-  // ----- Calculs pour les graphiques -----
   const categories: string[] = [];
   const tasksByCategory: Record<string, Task[]> = {};
   for (const t of tasks) {
@@ -422,7 +410,6 @@ export default function CACFollowUpPage() {
     return "text-slate-400";
   }
 
-  // ----- Rendu -----
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -451,17 +438,19 @@ export default function CACFollowUpPage() {
               setMissionTypeId(id);
             }}
           />
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-[#1e3a5f] text-white rounded-xl text-sm font-medium hover:bg-[#2a4f7f] transition-all shadow-sm"
-          >
-            <Plus size={16} />
-            Ajouter client
-          </button>
+          {/* ✅ WRAPPED: Ajouter client */}
+          <ProtectedAction module="suivi_cac" action="create">
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-[#1e3a5f] text-white rounded-xl text-sm font-medium hover:bg-[#2a4f7f] transition-all shadow-sm"
+            >
+              <Plus size={16} />
+              Ajouter client
+            </button>
+          </ProtectedAction>
         </div>
       </div>
 
-      {/* Affichage d'erreur */}
       {error && (
         <div className="p-3 bg-red-100 text-red-700 rounded-md border border-red-300 text-sm">
           <AlertCircle className="inline-block w-4 h-4 mr-1" />
@@ -469,7 +458,6 @@ export default function CACFollowUpPage() {
         </div>
       )}
 
-      {/* Cartes statistiques */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           {
@@ -512,7 +500,6 @@ export default function CACFollowUpPage() {
         ))}
       </div>
 
-      {/* Boutons graphiques + sauvegarde */}
       <div className="flex items-center justify-between">
         <button
           onClick={() => setShowCharts(!showCharts)}
@@ -521,21 +508,23 @@ export default function CACFollowUpPage() {
           {showCharts ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
           Graphiques
         </button>
-        <button
-          onClick={handleSave}
-          disabled={saving || !dirty}
-          className="flex items-center gap-2 px-4 py-2 bg-[#1e3a5f] text-white rounded-xl text-sm font-medium hover:bg-[#2a4f7f] disabled:opacity-50 transition-all"
-        >
-          {saving ? (
-            <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-          ) : (
-            <Save size={16} />
-          )}
-          Enregistrer
-        </button>
+        {/* ✅ WRAPPED: Enregistrer */}
+        <ProtectedAction module="suivi_cac" action="edit">
+          <button
+            onClick={handleSave}
+            disabled={saving || !dirty}
+            className="flex items-center gap-2 px-4 py-2 bg-[#1e3a5f] text-white rounded-xl text-sm font-medium hover:bg-[#2a4f7f] disabled:opacity-50 transition-all"
+          >
+            {saving ? (
+              <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <Save size={16} />
+            )}
+            Enregistrer
+          </button>
+        </ProtectedAction>
       </div>
 
-      {/* Graphiques */}
       {showCharts && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
@@ -614,7 +603,6 @@ export default function CACFollowUpPage() {
         </div>
       )}
 
-      {/* Datalist pour les responsables (placé hors tableau) */}
       <datalist id="teamMembersList">
         <option value="">--</option>
         {teamMembers.map((m) => (
@@ -624,7 +612,6 @@ export default function CACFollowUpPage() {
         ))}
       </datalist>
 
-      {/* Tableau principal */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-x-auto">
         <table className="w-full text-xs border-collapse min-w-[800px]">
           <thead>
@@ -645,13 +632,16 @@ export default function CACFollowUpPage() {
                       {c.name}
                     </span>
                   </div>
-                  <button
-                    onClick={() => removeClient(c.id)}
-                    className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center hover:bg-red-600 transition-colors"
-                    title="Retirer ce client"
-                  >
-                    <X size={8} />
-                  </button>
+                  {/* ✅ WRAPPED: Remove client (delete) */}
+                  <ProtectedAction module="suivi_cac" action="delete">
+                    <button
+                      onClick={() => removeClient(c.id)}
+                      className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center hover:bg-red-600 transition-colors"
+                      title="Retirer ce client"
+                    >
+                      <X size={8} />
+                    </button>
+                  </ProtectedAction>
                 </th>
               ))}
             </tr>
@@ -737,89 +727,90 @@ export default function CACFollowUpPage() {
 
                           return (
                             <td key={c.id} className="px-1 py-1">
-                              <div className="flex gap-0.5">
-                                {/* Production */}
-                                <div className="flex-1">
-                                  <input
-                                    type="text"
-                                    list="teamMembersList"
-                                    value={cell.production}
-                                    onChange={(e) =>
-                                      updateCell(
-                                        key,
-                                        "production",
-                                        e.target.value,
-                                      )
-                                    }
-                                    className={`w-full text-[10px] rounded px-1 py-1.5 border-0 ${bgP} ${txtP} focus:outline-none focus:ring-1 focus:ring-blue-400`}
-                                    placeholder="--"
-                                  />
-                                </div>
-                                {/* Supervision */}
-                                <div className="flex-1">
-                                  <input
-                                    type="text"
-                                    list="teamMembersList"
-                                    value={cell.supervision}
-                                    onChange={(e) =>
-                                      updateCell(
-                                        key,
-                                        "supervision",
-                                        e.target.value,
-                                      )
-                                    }
-                                    className={`w-full text-[10px] rounded px-1 py-1.5 border-0 ${bgS} ${txtS} focus:outline-none focus:ring-1 focus:ring-blue-400`}
-                                    placeholder="--"
-                                  />
-                                </div>
-                              </div>
-                              <div className="flex gap-0.5 mt-0.5">
-                                <div className="flex-1">
-                                  <select
-                                    value={cell.status}
-                                    onChange={(e) => {
-                                      const s = e.target.value;
-                                      updateCell(key, "status", s);
-                                      if (s === "completed")
-                                        updateCell(
-                                          key,
-                                          "progress_percentage",
-                                          100,
-                                        );
-                                      else if (s === "not_started")
-                                        updateCell(
-                                          key,
-                                          "progress_percentage",
-                                          0,
-                                        );
-                                    }}
-                                    className={`w-full text-[9px] rounded px-0.5 py-0.5 border-0 ${bgP} ${txtP} cursor-pointer focus:outline-none`}
-                                  >
-                                    <option value="not_started">--</option>
-                                    <option value="in_progress">Cours</option>
-                                    <option value="completed">OK</option>
-                                    <option value="n_a">N/A</option>
-                                  </select>
-                                </div>
-                                {cell.status === "in_progress" && (
+                              {/* ✅ WRAPPED: Cell editing (edit) */}
+                              <ProtectedAction module="suivi_cac" action="edit">
+                                <div className="flex gap-0.5">
                                   <div className="flex-1">
                                     <input
-                                      type="number"
-                                      min={0}
-                                      max={100}
-                                      value={cell.progress_percentage || 0}
+                                      type="text"
+                                      list="teamMembersList"
+                                      value={cell.production}
                                       onChange={(e) =>
                                         updateCell(
                                           key,
-                                          "progress_percentage",
-                                          parseInt(e.target.value) || 0,
+                                          "production",
+                                          e.target.value,
                                         )
                                       }
-                                      className="w-full text-[9px] text-center rounded px-0.5 py-0.5 border border-yellow-300 bg-yellow-50 text-yellow-800 focus:outline-none"
+                                      className={`w-full text-[10px] rounded px-1 py-1.5 border-0 ${bgP} ${txtP} focus:outline-none focus:ring-1 focus:ring-blue-400`}
+                                      placeholder="--"
                                     />
                                   </div>
-                                )}
-                              </div>
+                                  <div className="flex-1">
+                                    <input
+                                      type="text"
+                                      list="teamMembersList"
+                                      value={cell.supervision}
+                                      onChange={(e) =>
+                                        updateCell(
+                                          key,
+                                          "supervision",
+                                          e.target.value,
+                                        )
+                                      }
+                                      className={`w-full text-[10px] rounded px-1 py-1.5 border-0 ${bgS} ${txtS} focus:outline-none focus:ring-1 focus:ring-blue-400`}
+                                      placeholder="--"
+                                    />
+                                  </div>
+                                </div>
+                                <div className="flex gap-0.5 mt-0.5">
+                                  <div className="flex-1">
+                                    <select
+                                      value={cell.status}
+                                      onChange={(e) => {
+                                        const s = e.target.value;
+                                        updateCell(key, "status", s);
+                                        if (s === "completed")
+                                          updateCell(
+                                            key,
+                                            "progress_percentage",
+                                            100,
+                                          );
+                                        else if (s === "not_started")
+                                          updateCell(
+                                            key,
+                                            "progress_percentage",
+                                            0,
+                                          );
+                                      }}
+                                      className={`w-full text-[9px] rounded px-0.5 py-0.5 border-0 ${bgP} ${txtP} cursor-pointer focus:outline-none`}
+                                    >
+                                      <option value="not_started">--</option>
+                                      <option value="in_progress">Cours</option>
+                                      <option value="completed">OK</option>
+                                      <option value="n_a">N/A</option>
+                                    </select>
+                                  </div>
+                                  {cell.status === "in_progress" && (
+                                    <div className="flex-1">
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        max={100}
+                                        value={cell.progress_percentage || 0}
+                                        onChange={(e) =>
+                                          updateCell(
+                                            key,
+                                            "progress_percentage",
+                                            parseInt(e.target.value) || 0,
+                                          )
+                                        }
+                                        className="w-full text-[9px] text-center rounded px-0.5 py-0.5 border border-yellow-300 bg-yellow-50 text-yellow-800 focus:outline-none"
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                              </ProtectedAction>
                             </td>
                           );
                         })}
@@ -829,7 +820,6 @@ export default function CACFollowUpPage() {
               );
             })}
 
-            {/* Ligne de progression globale */}
             <tr className="bg-[#1e3a5f]/5 border-t-2 border-[#1e3a5f]/20">
               <td className="px-3 py-3 font-bold text-slate-800 text-xs uppercase tracking-wider sticky left-0 bg-inherit z-10">
                 Progression
@@ -868,7 +858,6 @@ export default function CACFollowUpPage() {
         </table>
       </div>
 
-      {/* Modal d'ajout de client */}
       {showAddModal && (
         <div
           className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
@@ -907,21 +896,30 @@ export default function CACFollowUpPage() {
                         .includes(addSearch.toLowerCase()),
                   )
                   .map((c) => (
-                    <button
+                    // ✅ WRAPPED: Add client to grid (edit)
+                    <ProtectedAction
                       key={c.id}
-                      onClick={() => addClient(c)}
-                      className="w-full flex items-center justify-between px-3 py-3 hover:bg-slate-50 rounded-lg transition-colors text-left"
+                      module="suivi_cac"
+                      action="edit"
                     >
-                      <div>
-                        <p className="font-medium text-slate-700 text-sm">
-                          {c.name}
-                        </p>
-                        <p className="text-xs text-slate-400 font-mono">
-                          {c.client_code}
-                        </p>
-                      </div>
-                      <Plus size={16} className="text-blue-500 flex-shrink-0" />
-                    </button>
+                      <button
+                        onClick={() => addClient(c)}
+                        className="w-full flex items-center justify-between px-3 py-3 hover:bg-slate-50 rounded-lg transition-colors text-left"
+                      >
+                        <div>
+                          <p className="font-medium text-slate-700 text-sm">
+                            {c.name}
+                          </p>
+                          <p className="text-xs text-slate-400 font-mono">
+                            {c.client_code}
+                          </p>
+                        </div>
+                        <Plus
+                          size={16}
+                          className="text-blue-500 flex-shrink-0"
+                        />
+                      </button>
+                    </ProtectedAction>
                   ))}
               </div>
             </div>

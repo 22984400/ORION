@@ -19,6 +19,7 @@ import { cn, formatCurrency } from "../../lib/utils";
 import { supabase } from "../../lib/supabase";
 import { addNotification } from "../../lib/notifications";
 import type { FixedAsset } from "../../types";
+import { ProtectedAction } from "../../components/auth/ProtectedAction"; // ✅ ADDED
 
 // Hooks pour l'amortissement
 import {
@@ -58,7 +59,6 @@ interface ExtendedFixedAsset {
   created_at: string;
   acquisition_date?: string;
   net_book_value?: number;
-  // Champs supplémentaires
   family?: string | null;
   location?: string | null;
   invoice_number?: string | null;
@@ -185,17 +185,11 @@ export function FixedAssetsPage() {
     { value: "Disposed", label: t("status.disposed") },
   ];
 
-  // View mode: list or dashboard
   const [viewMode, setViewMode] = useState<"list" | "dashboard">("list");
-
-  // Liked assets (local state, not persisted)
   const [likedAssets, setLikedAssets] = useState<Set<string>>(new Set());
-
-  // Sous‑données
   const [movements] = useState<AssetMovement[]>([]);
   const [disposal] = useState<AssetDisposal | null>(null);
 
-  // État du formulaire
   const [formData, setFormData] = useState<Partial<ExtendedFixedAsset>>({
     asset_name: "",
     category: "",
@@ -216,7 +210,6 @@ export function FixedAssetsPage() {
     status: "Draft",
   });
 
-  // Chargement des actifs
   const {
     data: assetsRaw = [],
     loading,
@@ -227,7 +220,6 @@ export function FixedAssetsPage() {
     orderAsc: false,
   });
 
-  // Enrichissement des actifs avec typage correct et valeurs par défaut
   const assets: ExtendedFixedAsset[] = assetsRaw.map((asset) => {
     const status = (asset.status || "Draft") as AssetStatus;
     const currency = asset.currency ? String(asset.currency) : "XAF";
@@ -256,7 +248,6 @@ export function FixedAssetsPage() {
     };
   });
 
-  // Statistiques
   const totalPurchase = assets.reduce((s, a) => s + (a.purchase_value || 0), 0);
   const totalDep = assets.reduce((s, a) => {
     const years = a.useful_life_years || 10;
@@ -268,7 +259,6 @@ export function FixedAssetsPage() {
   }, 0);
   const totalNBV = totalPurchase - totalDep;
 
-  // Données pour les graphiques
   const categoryData = assets.reduce(
     (acc, a) => {
       const cat = a.category || t("common.unknown");
@@ -312,7 +302,6 @@ export function FixedAssetsPage() {
     }),
   );
 
-  // Couleurs
   const COLORS = [
     "#3b82f6",
     "#8b5cf6",
@@ -322,7 +311,6 @@ export function FixedAssetsPage() {
     "#ef4444",
   ];
 
-  // Filtres
   const filtered = assets.filter((a) => {
     const matchSearch =
       (a.asset_name?.toLowerCase() || "").includes(search.toLowerCase()) ||
@@ -331,14 +319,10 @@ export function FixedAssetsPage() {
     return matchSearch && matchStatus;
   });
 
-  // ==================== HOOKS AMORTISSEMENT ====================
-
   const { data: depreciationSchedule = [] } = useDepreciationSchedule(
     selectedAsset?.id || "",
   );
   const generateMutation = useGenerateDepreciation();
-
-  // ==================== ACTIONS ====================
 
   const handleCreate = async () => {
     try {
@@ -574,12 +558,15 @@ export function FixedAssetsPage() {
           >
             <LayoutGrid className="w-5 h-5" />
           </button>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="btn-primary flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" /> {t("common.create")}
-          </button>
+          {/* ✅ WRAPPED: Create button */}
+          <ProtectedAction module="immobilisations" action="create">
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="btn-primary flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" /> {t("common.create")}
+            </button>
+          </ProtectedAction>
         </div>
       </div>
 
@@ -711,22 +698,30 @@ export function FixedAssetsPage() {
                           >
                             {statusLabels[asset.status] ?? asset.status}
                           </Badge>
-                          <select
-                            value={asset.status || "Draft"}
-                            onChange={(e) =>
-                              handleStatusChange(asset.id, e.target.value)
-                            }
-                            className="text-xs bg-slate-700 border border-slate-600 rounded px-1 py-0.5 text-slate-200 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                          {/* ✅ WRAPPED: Status change select (edit) */}
+                          <ProtectedAction
+                            module="immobilisations"
+                            action="edit"
                           >
-                            <option value="Draft">{t("status.draft")}</option>
-                            <option value="Active">{t("status.active")}</option>
-                            <option value="In_Maintenance">
-                              {t("status.maintenance")}
-                            </option>
-                            <option value="Disposed">
-                              {t("status.disposed")}
-                            </option>
-                          </select>
+                            <select
+                              value={asset.status || "Draft"}
+                              onChange={(e) =>
+                                handleStatusChange(asset.id, e.target.value)
+                              }
+                              className="text-xs bg-slate-700 border border-slate-600 rounded px-1 py-0.5 text-slate-200 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                            >
+                              <option value="Draft">{t("status.draft")}</option>
+                              <option value="Active">
+                                {t("status.active")}
+                              </option>
+                              <option value="In_Maintenance">
+                                {t("status.maintenance")}
+                              </option>
+                              <option value="Disposed">
+                                {t("status.disposed")}
+                              </option>
+                            </select>
+                          </ProtectedAction>
                         </div>
                       </td>
                       <td className="px-4 py-3">
@@ -750,29 +745,47 @@ export function FixedAssetsPage() {
                               fill={isLiked ? "currentColor" : "none"}
                             />
                           </button>
-                          <button
-                            onClick={() => openDetail(asset)}
-                            className="text-slate-400 hover:text-slate-200"
-                            title={t("common.view")}
+                          {/* ✅ WRAPPED: View */}
+                          <ProtectedAction
+                            module="immobilisations"
+                            action="view"
                           >
-                            <Eye className="w-4 h-4" />
-                          </button>
+                            <button
+                              onClick={() => openDetail(asset)}
+                              className="text-slate-400 hover:text-slate-200"
+                              title={t("common.view")}
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                          </ProtectedAction>
                           {asset.status === "Draft" && (
                             <>
-                              <button
-                                onClick={() => handleValidate(asset.id)}
-                                className="text-emerald-400 hover:text-emerald-300"
-                                title={t("fixedAssets.actions.validate")}
+                              {/* ✅ WRAPPED: Validate (edit) */}
+                              <ProtectedAction
+                                module="immobilisations"
+                                action="edit"
                               >
-                                <CheckCircle className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => handleDelete(asset.id)}
-                                className="text-red-400 hover:text-red-300"
-                                title={t("common.delete")}
+                                <button
+                                  onClick={() => handleValidate(asset.id)}
+                                  className="text-emerald-400 hover:text-emerald-300"
+                                  title={t("fixedAssets.actions.validate")}
+                                >
+                                  <CheckCircle className="w-4 h-4" />
+                                </button>
+                              </ProtectedAction>
+                              {/* ✅ WRAPPED: Delete */}
+                              <ProtectedAction
+                                module="immobilisations"
+                                action="delete"
                               >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
+                                <button
+                                  onClick={() => handleDelete(asset.id)}
+                                  className="text-red-400 hover:text-red-300"
+                                  title={t("common.delete")}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </ProtectedAction>
                             </>
                           )}
                         </div>
@@ -1236,9 +1249,12 @@ export function FixedAssetsPage() {
                 >
                   {t("common.cancel")}
                 </button>
-                <button type="submit" className="btn-primary">
-                  {t("common.create")}
-                </button>
+                {/* ✅ WRAPPED: Create submit */}
+                <ProtectedAction module="immobilisations" action="create">
+                  <button type="submit" className="btn-primary">
+                    {t("common.create")}
+                  </button>
+                </ProtectedAction>
               </div>
             </form>
           </div>
@@ -1404,19 +1420,25 @@ export function FixedAssetsPage() {
                 </div>
                 <div className="col-span-2 flex gap-2 mt-2">
                   {selectedAsset.status === "Draft" && (
-                    <button
-                      onClick={() => handleValidate(selectedAsset.id)}
-                      className="btn-primary text-sm"
-                    >
-                      {t("fixedAssets.actions.validate")}
-                    </button>
+                    // ✅ WRAPPED: Validate (edit)
+                    <ProtectedAction module="immobilisations" action="edit">
+                      <button
+                        onClick={() => handleValidate(selectedAsset.id)}
+                        className="btn-primary text-sm"
+                      >
+                        {t("fixedAssets.actions.validate")}
+                      </button>
+                    </ProtectedAction>
                   )}
-                  <button
-                    onClick={() => setEditMode(true)}
-                    className="btn-secondary text-sm"
-                  >
-                    {t("common.edit")}
-                  </button>
+                  {/* ✅ WRAPPED: Enter edit mode (edit) */}
+                  <ProtectedAction module="immobilisations" action="edit">
+                    <button
+                      onClick={() => setEditMode(true)}
+                      className="btn-secondary text-sm"
+                    >
+                      {t("common.edit")}
+                    </button>
+                  </ProtectedAction>
                 </div>
                 {editMode && (
                   <div className="col-span-2 border-t border-slate-700 pt-4">
@@ -1588,9 +1610,12 @@ export function FixedAssetsPage() {
                         >
                           {t("common.cancel")}
                         </button>
-                        <button type="submit" className="btn-primary">
-                          {t("common.update")}
-                        </button>
+                        {/* ✅ WRAPPED: Update (edit) */}
+                        <ProtectedAction module="immobilisations" action="edit">
+                          <button type="submit" className="btn-primary">
+                            {t("common.update")}
+                          </button>
+                        </ProtectedAction>
                       </div>
                     </form>
                   </div>

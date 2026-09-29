@@ -11,6 +11,7 @@ import { useTranslation } from "react-i18next";
 import { AppLayout } from "./components/layout/AppLayout";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
 import { RoleGuard } from "./components/auth/RoleGuard";
+import { PermissionGate } from "./components/auth/PermissionGate";
 import { AuthPage } from "./pages/auth/AuthPage";
 import { ResetPasswordPage } from "./pages/auth/ResetPasswordPage";
 import { PendingApprovalPage } from "./pages/PendingApprovalPage";

@@ -6,6 +6,8 @@ import styled from "styled-components";
 import { supabase } from "../../lib/supabase";
 import { format } from "date-fns";
 import { useAuth } from "../../contexts/AuthContext";
+import { ProtectedAction } from "../../components/auth/ProtectedAction";
+import { buildAccessFilter } from "../../lib/permissions"; // ✅ ADDED
 
 const Container = styled.div`
   background: #0f172a;
@@ -122,23 +124,36 @@ interface Collaborateur {
 
 export const CollaborateurList: React.FC = () => {
   const { t } = useTranslation();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const navigate = useNavigate();
   const [collaborateurs, setCollaborateurs] = useState<Collaborateur[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchData = async () => {
-    // ⚠️ Attendre que l'utilisateur soit authentifié
     if (!user) {
       setLoading(false);
       return;
     }
 
     try {
-      const { data, error } = await supabase
+      // ✅ Row-level filtering: stagiaires/auditors without view permission
+      //    only see their own profile + profiles they manage.
+      const accessFilter = buildAccessFilter({
+        role: profile?.role,
+        module: "collaborateurs",
+        currentUserId: user.id,
+        ownerColumn: "id", // collaborator.id matches current user
+        assignmentColumn: "manager_id", // OR their manager is the current user
+      });
+
+      let q = supabase
         .from("collaborateurs")
         .select("id, nom, prenom, photo_url, fonction, pays, date_embauche")
         .order("nom");
+
+      if (accessFilter) q = q.or(accessFilter);
+
+      const { data, error } = await q;
       if (error) throw error;
       setCollaborateurs(data || []);
     } catch (err) {
@@ -150,7 +165,7 @@ export const CollaborateurList: React.FC = () => {
 
   useEffect(() => {
     fetchData();
-  }, [user]); // ✅ Ajout de "user" comme dépendance
+  }, [user, profile?.role]);
 
   if (loading) {
     return (
@@ -166,12 +181,14 @@ export const CollaborateurList: React.FC = () => {
         <HeaderTitle>
           <i className="fas fa-users"></i> Collaborateurs
         </HeaderTitle>
-        <Button
-          variant="primary"
-          onClick={() => navigate("/collaborateurs/new")}
-        >
-          <i className="fas fa-plus"></i> Nouveau collaborateur
-        </Button>
+        <ProtectedAction module="collaborateurs" action="create">
+          <Button
+            variant="primary"
+            onClick={() => navigate("/collaborateurs/new")}
+          >
+            <i className="fas fa-plus"></i> Nouveau collaborateur
+          </Button>
+        </ProtectedAction>
       </Header>
 
       <TableWrapper>
@@ -188,30 +205,31 @@ export const CollaborateurList: React.FC = () => {
           </thead>
           <tbody>
             {collaborateurs.map((c) => (
-              <tr
-                key={c.id}
-                className="clickable"
-                onClick={() => navigate(`/collaborateurs/${c.id}`)}
-              >
-                <td>
-                  <Avatar>
-                    {c.photo_url ? (
-                      <img src={c.photo_url} alt={c.nom} />
-                    ) : (
-                      <i className="fas fa-user-circle"></i>
-                    )}
-                  </Avatar>
-                </td>
-                <td>{c.nom}</td>
-                <td>{c.prenom}</td>
-                <td>{c.fonction || "-"}</td>
-                <td>{c.pays || "-"}</td>
-                <td>
-                  {c.date_embauche
-                    ? format(new Date(c.date_embauche), "dd/MM/yyyy")
-                    : "-"}
-                </td>
-              </tr>
+              <ProtectedAction key={c.id} module="collaborateurs" action="view">
+                <tr
+                  className="clickable"
+                  onClick={() => navigate(`/collaborateurs/${c.id}`)}
+                >
+                  <td>
+                    <Avatar>
+                      {c.photo_url ? (
+                        <img src={c.photo_url} alt={c.nom} />
+                      ) : (
+                        <i className="fas fa-user-circle"></i>
+                      )}
+                    </Avatar>
+                  </td>
+                  <td>{c.nom}</td>
+                  <td>{c.prenom}</td>
+                  <td>{c.fonction || "-"}</td>
+                  <td>{c.pays || "-"}</td>
+                  <td>
+                    {c.date_embauche
+                      ? format(new Date(c.date_embauche), "dd/MM/yyyy")
+                      : "-"}
+                  </td>
+                </tr>
+              </ProtectedAction>
             ))}
             {collaborateurs.length === 0 && (
               <tr>

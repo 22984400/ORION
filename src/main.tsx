@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"; // ðŸ‘
 import "./lib/i18n";
 import App from "./App";
 import { AuthProvider } from "./contexts/AuthContext";
+import { PermissionProvider } from "./contexts/PermissionContext";
 import { CountryProvider } from "./contexts/CountryContext";
 import { DatabaseProvider } from "./contexts/DatabaseContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -24,11 +25,13 @@ createRoot(rootElement).render(
       {/* ðŸ‘ˆ wrapper */}
       <ThemeProvider>
         <AuthProvider>
-          <DatabaseProvider>
-            <CountryProvider>
-              <App />
-            </CountryProvider>
-          </DatabaseProvider>
+          <PermissionProvider>
+            <DatabaseProvider>
+              <CountryProvider>
+                <App />
+              </CountryProvider>
+            </DatabaseProvider>
+          </PermissionProvider>
         </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>

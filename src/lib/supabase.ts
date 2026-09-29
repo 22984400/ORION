@@ -1,5 +1,11 @@
 // src/lib/supabase.ts
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import {
+  hasPermission,
+  RPC_WRITE_PERMISSION,
+  TABLE_WRITE_MODULE,
+  writeMethodToAction,
+} from "./permissions";
 
 // =====================================================
 // 1. ENVIRONMENT VARIABLES
@@ -115,11 +121,32 @@ function getBlockReason(): "demo" | "no-role" | null {
   }
 }
 
+function currentWriteUser(): { role?: string | null } {
+  try {
+    return { role: localStorage.getItem(USER_ROLE_KEY) };
+  } catch {
+    return { role: null };
+  }
+}
+
+function isModuleWriteDenied(table: string, method: string): boolean {
+  const moduleId = TABLE_WRITE_MODULE[table];
+  if (!moduleId) return false;
+  const action = writeMethodToAction(method);
+  return !hasPermission(currentWriteUser(), moduleId, action);
+}
+
+function isRpcWriteDenied(fnName: string): boolean {
+  const mapped = RPC_WRITE_PERMISSION[fnName];
+  if (!mapped) return false;
+  return !hasPermission(currentWriteUser(), mapped.module, mapped.action);
+}
+
 // =====================================================
 // 5. FAKE CHAIN — Simulates Supabase responses (no network)
 // =====================================================
-function createFakeResponse() {
-  const resolved = Promise.resolve({ data: null, error: null });
+function createFakeResponse(error: { message: string; code?: string } | null = null) {
+  const resolved = Promise.resolve({ data: null, error });
   const chain: any = {
     insert: () => chain,
     update: () => chain,
@@ -190,8 +217,24 @@ export const supabase: SupabaseClient = new Proxy(realClient, {
           });
         }
 
-        // Full access
-        return (target as any).from(table);
+        const builder = (target as any).from(table);
+        return new Proxy(builder, {
+          get(b, methodName: string) {
+            if (WRITE_METHODS.includes(methodName) && isModuleWriteDenied(table, methodName)) {
+              return (...args: any[]) => {
+                console.warn(
+                  `⛔ [RBAC] Blocked write: ${table}.${methodName}()`,
+                  args,
+                );
+                return createFakeResponse({
+                  message: "Permission insuffisante",
+                  code: "PERMISSION_DENIED",
+                });
+              };
+            }
+            return (b as any)[methodName];
+          },
+        });
       };
     }
 
@@ -204,6 +247,13 @@ export const supabase: SupabaseClient = new Proxy(realClient, {
           const label = reason === "demo" ? "[DEMO]" : "[NO-ROLE]";
           console.warn(`${emoji} ${label} Blocked RPC: ${fnName}()`, params);
           return Promise.resolve({ data: null, error: null });
+        }
+        if (isRpcWriteDenied(fnName)) {
+          console.warn(`⛔ [RBAC] Blocked RPC: ${fnName}()`, params);
+          return Promise.resolve({
+            data: null,
+            error: { message: "Permission insuffisante", code: "PERMISSION_DENIED" },
+          });
         }
         return (target as any).rpc(fnName, params);
       };

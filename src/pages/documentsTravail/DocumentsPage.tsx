@@ -17,8 +17,8 @@ import { cn, formatDate, formatNumber } from "../../lib/utils";
 import { addNotification } from "../../lib/notifications";
 import { useSupabaseQuery } from "../../hooks/useSupabaseData";
 import { supabase } from "../../lib/supabase";
+import { ProtectedAction } from "../../components/auth/ProtectedAction"; // ✅ ADDED
 
-// ⭐ Local type (no import needed)
 interface WorkingDocument {
   id: string;
   title: string;
@@ -128,7 +128,6 @@ export function DocumentsPage() {
         .upload(filePath, file);
       if (uploadError) throw uploadError;
 
-      // ⭐ Store PATH (not public URL)
       const payload = {
         title: form.title.trim(),
         description: form.description?.trim() || null,
@@ -205,13 +204,16 @@ export function DocumentsPage() {
         title="Documents de travail et missions"
         description="Gérez les documents internes du cabinet"
         actions={
-          <button
-            onClick={() => setShowUpload(true)}
-            className="btn-primary btn-md"
-          >
-            <Upload className="w-4 h-4" />
-            Téléverser
-          </button>
+          // ✅ WRAPPED: Téléverser (create)
+          <ProtectedAction module="besoins_cabinet" action="create">
+            <button
+              onClick={() => setShowUpload(true)}
+              className="btn-primary btn-md"
+            >
+              <Upload className="w-4 h-4" />
+              Téléverser
+            </button>
+          </ProtectedAction>
         }
       />
 
@@ -359,16 +361,22 @@ export function DocumentsPage() {
                               className="p-1.5 rounded hover:bg-slate-700/50"
                             />
                           )}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDelete(doc);
-                            }}
-                            className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-red-400"
-                            title="Supprimer"
+                          {/* ✅ WRAPPED: Delete (delete) */}
+                          <ProtectedAction
+                            module="besoins_cabinet"
+                            action="delete"
                           >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDelete(doc);
+                              }}
+                              className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-red-400"
+                              title="Supprimer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </ProtectedAction>
                         </div>
                       </td>
                     </tr>
@@ -406,16 +414,19 @@ export function DocumentsPage() {
                 >
                   {CATEGORY_LABELS[doc.category] || doc.category}
                 </Badge>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDelete(doc);
-                  }}
-                  className="absolute top-2 right-2 p-1.5 rounded-lg bg-slate-800/80 text-slate-400 hover:text-red-400 hover:bg-slate-700/80 opacity-0 group-hover:opacity-100 transition-opacity"
-                  title="Supprimer"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                {/* ✅ WRAPPED: Delete (delete) */}
+                <ProtectedAction module="besoins_cabinet" action="delete">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDelete(doc);
+                    }}
+                    className="absolute top-2 right-2 p-1.5 rounded-lg bg-slate-800/80 text-slate-400 hover:text-red-400 hover:bg-slate-700/80 opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Supprimer"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </ProtectedAction>
               </div>
             );
           })}
@@ -484,23 +495,28 @@ export function DocumentsPage() {
               </div>
               <div className="flex gap-2 mt-4">
                 {selectedDoc.file_path && (
-                  <DocumentLink
-                    filePath={selectedDoc.file_path}
-                    bucket={BUCKET_NAME}
-                    label="Télécharger"
-                    className="btn-primary btn-sm"
-                  />
+                  <ProtectedAction module="besoins_cabinet" action="view">
+                    <DocumentLink
+                      filePath={selectedDoc.file_path}
+                      bucket={BUCKET_NAME}
+                      label="Télécharger"
+                      className="btn-primary btn-sm"
+                    />
+                  </ProtectedAction>
                 )}
-                <button
-                  onClick={() => {
-                    setShowDetail(false);
-                    handleDelete(selectedDoc);
-                  }}
-                  className="btn-danger btn-sm gap-1"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  Supprimer
-                </button>
+                {/* ✅ WRAPPED: Supprimer (delete) */}
+                <ProtectedAction module="besoins_cabinet" action="delete">
+                  <button
+                    onClick={() => {
+                      setShowDetail(false);
+                      handleDelete(selectedDoc);
+                    }}
+                    className="btn-danger btn-sm gap-1"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Supprimer
+                  </button>
+                </ProtectedAction>
               </div>
             </div>
           </div>
@@ -587,13 +603,16 @@ export function DocumentsPage() {
                 )}
               </div>
               <div className="flex gap-3 pt-2">
-                <button
-                  onClick={handleUpload}
-                  disabled={uploading}
-                  className="btn-primary btn-md flex-1"
-                >
-                  {uploading ? "Téléversement..." : "Téléverser"}
-                </button>
+                {/* ✅ WRAPPED: Téléverser (create) */}
+                <ProtectedAction module="besoins_cabinet" action="create">
+                  <button
+                    onClick={handleUpload}
+                    disabled={uploading}
+                    className="btn-primary btn-md flex-1"
+                  >
+                    {uploading ? "Téléversement..." : "Téléverser"}
+                  </button>
+                </ProtectedAction>
                 <button
                   onClick={() => setShowUpload(false)}
                   className="btn-secondary btn-md flex-1"

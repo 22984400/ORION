@@ -1,3 +1,4 @@
+// src/pages/review-notes/ReviewNotesPage.tsx
 import { useState, useEffect } from "react";
 import {
   Plus,
@@ -18,15 +19,14 @@ import { addNotification } from "../../lib/notifications";
 import { useSupabaseQuery } from "../../hooks/useSupabaseData";
 import { SEVERITY_LABELS } from "../../lib/constants";
 import type { ReviewNote } from "../../types";
+import { ProtectedAction } from "../../components/auth/ProtectedAction"; // ✅ ADDED
 
-// Définir les options de statut
 const STATUS_OPTIONS = {
   open: "Ouvert",
   in_progress: "En cours",
   resolved: "Résolu",
 } as const;
 
-// Définir les options de sévérité (on peut utiliser SEVERITY_LABELS déjà existant, mais on va créer un mapping pour le select)
 const SEVERITY_OPTIONS = {
   minor: "Mineur",
   significant: "Significatif",
@@ -56,14 +56,12 @@ export function ReviewNotesPage() {
     comments: "",
   });
 
-  // États pour les utilisateurs (profiles)
   const [profiles, setProfiles] = useState<{ id: string; full_name: string }[]>(
     [],
   );
   const [showAddUser, setShowAddUser] = useState(false);
   const [newUserForm, setNewUserForm] = useState({ full_name: "" });
 
-  // Charger les profils au montage
   useEffect(() => {
     const fetchProfiles = async () => {
       const { data, error } = await supabase
@@ -130,7 +128,6 @@ export function ReviewNotesPage() {
     refetch();
   };
 
-  // Ouvrir le formulaire d'édition
   const openEdit = (note: ReviewNote) => {
     setEditingNote(note);
     setForm({
@@ -146,7 +143,6 @@ export function ReviewNotesPage() {
     setShowModal(true);
   };
 
-  // Ajout d'un utilisateur
   const handleAddUser = async () => {
     if (!newUserForm.full_name.trim()) return alert("Veuillez saisir un nom");
     const { data, error } = await supabase
@@ -155,11 +151,10 @@ export function ReviewNotesPage() {
       .select()
       .single();
     if (error) {
-      alert("Erreur lors de l’ajout");
+      alert("Erreur lors de l'ajout");
       return;
     }
     setProfiles((prev) => [...prev, data]);
-    // Sélectionner automatiquement le nouvel utilisateur
     setForm((p) => ({ ...p, assigned_to_name: data.full_name }));
     setShowAddUser(false);
     setNewUserForm({ full_name: "" });
@@ -171,26 +166,29 @@ export function ReviewNotesPage() {
         title="Notes de revue"
         description="Suivez et gérez les anomalies d'audit"
         actions={
-          <button
-            onClick={() => {
-              setEditingNote(null);
-              setForm({
-                reference: "",
-                category: "",
-                description: "",
-                severity: "minor",
-                status: "open",
-                assigned_to_name: "",
-                due_date: "",
-                comments: "",
-              });
-              setShowModal(true);
-            }}
-            className="btn-primary btn-md"
-          >
-            <Plus className="w-4 h-4" />
-            Nouvelle note
-          </button>
+          // ✅ WRAPPED: Nouvelle note
+          <ProtectedAction module="review_notes" action="create">
+            <button
+              onClick={() => {
+                setEditingNote(null);
+                setForm({
+                  reference: "",
+                  category: "",
+                  description: "",
+                  severity: "minor",
+                  status: "open",
+                  assigned_to_name: "",
+                  due_date: "",
+                  comments: "",
+                });
+                setShowModal(true);
+              }}
+              className="btn-primary btn-md"
+            >
+              <Plus className="w-4 h-4" />
+              Nouvelle note
+            </button>
+          </ProtectedAction>
         }
       />
 
@@ -329,30 +327,39 @@ export function ReviewNotesPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-1">
-                      <button
-                        onClick={() => {
-                          setSelectedNote(note);
-                          setShowDetail(true);
-                        }}
-                        className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-slate-200"
-                        title="Voir"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => openEdit(note)}
-                        className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-primary-400"
-                        title="Modifier"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(note.id)}
-                        className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-error-400"
-                        title="Supprimer"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {/* ✅ WRAPPED: View */}
+                      <ProtectedAction module="review_notes" action="view">
+                        <button
+                          onClick={() => {
+                            setSelectedNote(note);
+                            setShowDetail(true);
+                          }}
+                          className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-slate-200"
+                          title="Voir"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                      </ProtectedAction>
+                      {/* ✅ WRAPPED: Edit */}
+                      <ProtectedAction module="review_notes" action="edit">
+                        <button
+                          onClick={() => openEdit(note)}
+                          className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-primary-400"
+                          title="Modifier"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                      </ProtectedAction>
+                      {/* ✅ WRAPPED: Delete */}
+                      <ProtectedAction module="review_notes" action="delete">
+                        <button
+                          onClick={() => handleDelete(note.id)}
+                          className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-error-400"
+                          title="Supprimer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </ProtectedAction>
                     </div>
                   </td>
                 </tr>
@@ -478,7 +485,6 @@ export function ReviewNotesPage() {
                 />
               </div>
 
-              {/* Combobox Sévérité */}
               <div>
                 <label className="text-xs text-slate-400 mb-1 block">
                   Sévérité
@@ -498,7 +504,6 @@ export function ReviewNotesPage() {
                 </select>
               </div>
 
-              {/* Combobox Statut */}
               <div>
                 <label className="text-xs text-slate-400 mb-1 block">
                   Statut
@@ -518,7 +523,6 @@ export function ReviewNotesPage() {
                 </select>
               </div>
 
-              {/* Combobox Assignée à avec ajout rapide */}
               <div>
                 <label className="text-xs text-slate-400 mb-1 block">
                   Assignée à
@@ -547,14 +551,17 @@ export function ReviewNotesPage() {
                       </option>
                     ))}
                   </select>
-                  <button
-                    type="button"
-                    onClick={() => setShowAddUser(true)}
-                    className="btn-secondary btn-md px-2"
-                    title="Ajouter un utilisateur"
-                  >
-                    <UserPlus className="w-4 h-4" />
-                  </button>
+                  {/* ✅ WRAPPED: Ajouter un utilisateur (collaborateurs:create) */}
+                  <ProtectedAction module="collaborateurs" action="create">
+                    <button
+                      type="button"
+                      onClick={() => setShowAddUser(true)}
+                      className="btn-secondary btn-md px-2"
+                      title="Ajouter un utilisateur"
+                    >
+                      <UserPlus className="w-4 h-4" />
+                    </button>
+                  </ProtectedAction>
                 </div>
               </div>
 
@@ -586,9 +593,15 @@ export function ReviewNotesPage() {
               </div>
 
               <div className="flex gap-3 pt-2">
-                <button onClick={handleSave} className="btn-primary btn-md">
-                  {editingNote ? "Mettre à jour" : "Créer"}
-                </button>
+                {/* ✅ WRAPPED: Save (create or edit) */}
+                <ProtectedAction
+                  module="review_notes"
+                  action={editingNote ? "edit" : "create"}
+                >
+                  <button onClick={handleSave} className="btn-primary btn-md">
+                    {editingNote ? "Mettre à jour" : "Créer"}
+                  </button>
+                </ProtectedAction>
                 <button
                   onClick={() => setShowModal(false)}
                   className="btn-secondary btn-md"
@@ -601,7 +614,6 @@ export function ReviewNotesPage() {
         </div>
       )}
 
-      {/* Modal ajout rapide utilisateur */}
       {showAddUser && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in"

@@ -8,7 +8,6 @@ import {
   Search,
   Calendar,
   User,
-  Users,
   UserPlus,
 } from "lucide-react";
 import { PageHeader } from "../../components/ui/PageHeader";
@@ -19,9 +18,11 @@ import { addNotification } from "../../lib/notifications";
 import { MISSION_STATUS_CONFIG, URGENCY_CONFIG } from "../../lib/constants";
 import type { WeeklyMission, Client, Profile } from "../../types";
 import { useAuth } from "../../contexts/AuthContext";
+import { ProtectedAction } from "../../components/auth/ProtectedAction";
+import { buildAccessFilter } from "../../lib/permissions";
 
 export function EngagementsPage() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [missions, setMissions] = useState<WeeklyMission[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -48,7 +49,7 @@ export function EngagementsPage() {
     progress: 0,
   });
 
-  // États pour les modals d’ajout rapide
+  // États pour les modals d'ajout rapide
   const [showAddClient, setShowAddClient] = useState(false);
   const [showAddResponsible, setShowAddResponsible] = useState(false);
   const [newClientForm, setNewClientForm] = useState({
@@ -71,26 +72,39 @@ export function EngagementsPage() {
 
     setLoading(true);
     try {
-      const { data: missionsData, error: missionsError } = await supabase
+      // ✅ Row-level filtering
+      const accessFilter = buildAccessFilter({
+        role: profile?.role,
+        module: "missions",
+        currentUserId: user.id,
+        ownerColumn: "created_by",
+        assignmentColumn: "responsible_id",
+      });
+
+      let q = supabase
         .from("weekly_missions")
         .select("*")
         .order("date", { ascending: false });
+
+      if (accessFilter) q = q.or(accessFilter);
+
+      const { data: missionsData, error: missionsError } = await q;
       if (missionsError) throw missionsError;
       setMissions(missionsData || []);
 
       const { data: clientsData, error: clientsError } = await supabase
         .from("clients")
-        .select("id, name")
+        .select("*")
         .order("name");
       if (clientsError) throw clientsError;
-      setClients(clientsData || []);
+      setClients((clientsData || []) as Client[]);
 
       const { data: profilesData, error: profilesError } = await supabase
         .from("profiles")
-        .select("id, full_name")
+        .select("*")
         .order("full_name");
       if (profilesError) throw profilesError;
-      setProfiles(profilesData || []);
+      setProfiles((profilesData || []) as Profile[]);
     } catch (err: any) {
       console.error("Erreur chargement :", err);
     } finally {
@@ -100,18 +114,14 @@ export function EngagementsPage() {
 
   useEffect(() => {
     fetchData();
-  }, [user]);
+  }, [user, profile?.role]);
 
   // Filtrage
   const filtered = missions.filter((m) => {
+    const clientName = clients.find((c) => c.id === m.client_id)?.name || "";
     const matchSearch =
-      m.subject.toLowerCase().includes(search.toLowerCase()) ||
-      (m.client_id
-        ? clients
-            .find((c) => c.id === m.client_id)
-            ?.name?.toLowerCase()
-            .includes(search.toLowerCase())
-        : false);
+      (m.subject || "").toLowerCase().includes(search.toLowerCase()) ||
+      clientName.toLowerCase().includes(search.toLowerCase());
     const matchStatus = statusFilter === "all" || m.status === statusFilter;
     return matchSearch && matchStatus;
   });
@@ -143,7 +153,6 @@ export function EngagementsPage() {
       await supabase.from("weekly_missions").insert([payload]);
     }
 
-    // Notifications selon le changement de statut
     const newStatus = form.status;
     if (previousStatus !== newStatus) {
       if (newStatus === "open") {
@@ -199,7 +208,7 @@ export function EngagementsPage() {
     }
   };
 
-  // Ouvrir le formulaire d’édition
+  // Ouvrir le formulaire d'édition
   const openEdit = (m: WeeklyMission) => {
     setEditingMission(m);
     setForm({
@@ -218,7 +227,7 @@ export function EngagementsPage() {
     setShowModal(true);
   };
 
-  // Ajout rapide d’un client
+  // Ajout rapide d'un client
   const handleAddClient = async () => {
     const { data, error } = await supabase
       .from("clients")
@@ -233,15 +242,15 @@ export function EngagementsPage() {
       .select()
       .single();
     if (!error && data) {
-      setClients([...clients, data]);
+      setClients([...clients, data as Client]);
       setShowAddClient(false);
       setNewClientForm({ name: "", email: "", contact_person: "" });
     } else {
-      alert("Erreur lors de l’ajout du client");
+      alert("Erreur lors de l'ajout du client");
     }
   };
 
-  // Ajout rapide d’un responsable
+  // Ajout rapide d'un responsable
   const handleAddResponsible = async () => {
     const { data, error } = await supabase
       .from("profiles")
@@ -250,16 +259,18 @@ export function EngagementsPage() {
           first_name: newResponsibleForm.first_name,
           last_name: newResponsibleForm.last_name,
           email: newResponsibleForm.email,
+          full_name:
+            `${newResponsibleForm.first_name} ${newResponsibleForm.last_name}`.trim(),
         },
       ])
       .select()
       .single();
     if (!error && data) {
-      setProfiles([...profiles, data]);
+      setProfiles([...profiles, data as Profile]);
       setShowAddResponsible(false);
       setNewResponsibleForm({ first_name: "", last_name: "", email: "" });
     } else {
-      alert("Erreur lors de l’ajout du responsable");
+      alert("Erreur lors de l'ajout du responsable");
     }
   };
 
@@ -269,29 +280,31 @@ export function EngagementsPage() {
         title="Missions de la semaine"
         description="Planifiez et suivez vos missions hebdomadaires"
         actions={
-          <button
-            onClick={() => {
-              setEditingMission(null);
-              setForm({
-                date: new Date().toISOString().slice(0, 10),
-                start_date: "",
-                end_date: "",
-                client_id: "",
-                subject: "",
-                objective: "",
-                urgency_level: "medium",
-                responsible_id: "",
-                status: "open",
-                comments: "",
-                progress: 0,
-              });
-              setShowModal(true);
-            }}
-            className="btn-primary btn-md"
-          >
-            <Plus className="w-4 h-4" />
-            Nouvelle mission
-          </button>
+          <ProtectedAction module="missions" action="create">
+            <button
+              onClick={() => {
+                setEditingMission(null);
+                setForm({
+                  date: new Date().toISOString().slice(0, 10),
+                  start_date: "",
+                  end_date: "",
+                  client_id: "",
+                  subject: "",
+                  objective: "",
+                  urgency_level: "medium",
+                  responsible_id: "",
+                  status: "open",
+                  comments: "",
+                  progress: 0,
+                });
+                setShowModal(true);
+              }}
+              className="btn-primary btn-md"
+            >
+              <Plus className="w-4 h-4" />
+              Nouvelle mission
+            </button>
+          </ProtectedAction>
         }
       />
 
@@ -423,25 +436,29 @@ export function EngagementsPage() {
                   </p>
                 )}
                 <div className="flex gap-1 mt-3 pt-3 border-t border-slate-700/30 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button
-                    onClick={() => openEdit(mission)}
-                    className="btn-ghost btn-sm gap-1"
-                  >
-                    <Edit className="w-3.5 h-3.5" />
-                    Modifier
-                  </button>
-                  <button
-                    onClick={() => handleDelete(mission.id, mission.subject)}
-                    disabled={deletingId === mission.id}
-                    className="btn-ghost btn-sm gap-1 text-slate-400 hover:text-error-400 disabled:opacity-50"
-                  >
-                    {deletingId === mission.id ? (
-                      <span className="w-3.5 h-3.5 border-2 border-slate-400/30 border-t-slate-400 rounded-full animate-spin" />
-                    ) : (
-                      <Trash2 className="w-3.5 h-3.5" />
-                    )}
-                    Supprimer
-                  </button>
+                  <ProtectedAction module="missions" action="edit">
+                    <button
+                      onClick={() => openEdit(mission)}
+                      className="btn-ghost btn-sm gap-1"
+                    >
+                      <Edit className="w-3.5 h-3.5" />
+                      Modifier
+                    </button>
+                  </ProtectedAction>
+                  <ProtectedAction module="missions" action="delete">
+                    <button
+                      onClick={() => handleDelete(mission.id, mission.subject)}
+                      disabled={deletingId === mission.id}
+                      className="btn-ghost btn-sm gap-1 text-slate-400 hover:text-error-400 disabled:opacity-50"
+                    >
+                      {deletingId === mission.id ? (
+                        <span className="w-3.5 h-3.5 border-2 border-slate-400/30 border-t-slate-400 rounded-full animate-spin" />
+                      ) : (
+                        <Trash2 className="w-3.5 h-3.5" />
+                      )}
+                      Supprimer
+                    </button>
+                  </ProtectedAction>
                 </div>
               </div>
             );
@@ -455,7 +472,7 @@ export function EngagementsPage() {
         </div>
       )}
 
-      {/* Modal d’ajout / modification */}
+      {/* Modal d'ajout / modification */}
       {showModal && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in"
@@ -511,7 +528,6 @@ export function EngagementsPage() {
                 </div>
               </div>
 
-              {/* Combobox Client */}
               <div>
                 <label className="text-xs text-slate-400 mb-1 block">
                   Client
@@ -531,14 +547,16 @@ export function EngagementsPage() {
                       </option>
                     ))}
                   </select>
-                  <button
-                    type="button"
-                    onClick={() => setShowAddClient(true)}
-                    className="btn-secondary btn-md px-2"
-                    title="Ajouter un client"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
+                  <ProtectedAction module="clients" action="create">
+                    <button
+                      type="button"
+                      onClick={() => setShowAddClient(true)}
+                      className="btn-secondary btn-md px-2"
+                      title="Ajouter un client"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </ProtectedAction>
                 </div>
               </div>
 
@@ -570,7 +588,6 @@ export function EngagementsPage() {
                 />
               </div>
 
-              {/* Combobox Responsable */}
               <div>
                 <label className="text-xs text-slate-400 mb-1 block">
                   Responsable
@@ -579,7 +596,10 @@ export function EngagementsPage() {
                   <select
                     value={form.responsible_id}
                     onChange={(e) =>
-                      setForm((p) => ({ ...p, responsible_id: e.target.value }))
+                      setForm((p) => ({
+                        ...p,
+                        responsible_id: e.target.value,
+                      }))
                     }
                     className="input-md flex-1"
                   >
@@ -590,14 +610,16 @@ export function EngagementsPage() {
                       </option>
                     ))}
                   </select>
-                  <button
-                    type="button"
-                    onClick={() => setShowAddResponsible(true)}
-                    className="btn-secondary btn-md px-2"
-                    title="Ajouter un responsable"
-                  >
-                    <UserPlus className="w-4 h-4" />
-                  </button>
+                  <ProtectedAction module="collaborateurs" action="create">
+                    <button
+                      type="button"
+                      onClick={() => setShowAddResponsible(true)}
+                      className="btn-secondary btn-md px-2"
+                      title="Ajouter un responsable"
+                    >
+                      <UserPlus className="w-4 h-4" />
+                    </button>
+                  </ProtectedAction>
                 </div>
               </div>
 
@@ -611,16 +633,24 @@ export function EngagementsPage() {
                   max="100"
                   value={form.progress}
                   onChange={(e) =>
-                    setForm((p) => ({ ...p, progress: Number(e.target.value) }))
+                    setForm((p) => ({
+                      ...p,
+                      progress: Number(e.target.value),
+                    }))
                   }
                   className="w-full"
                 />
               </div>
 
               <div className="flex gap-3 pt-2">
-                <button onClick={handleSave} className="btn-primary btn-md">
-                  {editingMission ? "Mettre à jour" : "Créer"}
-                </button>
+                <ProtectedAction
+                  module="missions"
+                  action={editingMission ? "edit" : "create"}
+                >
+                  <button onClick={handleSave} className="btn-primary btn-md">
+                    {editingMission ? "Mettre à jour" : "Créer"}
+                  </button>
+                </ProtectedAction>
                 <button
                   onClick={() => setShowModal(false)}
                   className="btn-secondary btn-md"
@@ -633,7 +663,7 @@ export function EngagementsPage() {
         </div>
       )}
 
-      {/* Modals d’ajout rapide (inchangés) */}
+      {/* Modals d'ajout rapide */}
       {showAddClient && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in"
@@ -653,7 +683,10 @@ export function EngagementsPage() {
                   type="text"
                   value={newClientForm.name}
                   onChange={(e) =>
-                    setNewClientForm((p) => ({ ...p, name: e.target.value }))
+                    setNewClientForm((p) => ({
+                      ...p,
+                      name: e.target.value,
+                    }))
                   }
                   className="input-md"
                 />
@@ -666,7 +699,10 @@ export function EngagementsPage() {
                   type="email"
                   value={newClientForm.email}
                   onChange={(e) =>
-                    setNewClientForm((p) => ({ ...p, email: e.target.value }))
+                    setNewClientForm((p) => ({
+                      ...p,
+                      email: e.target.value,
+                    }))
                   }
                   className="input-md"
                 />

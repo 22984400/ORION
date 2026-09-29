@@ -6,6 +6,7 @@ import { PageHeader } from "../../../components/ui/PageHeader";
 import { Badge } from "../../../components/ui/Badge";
 import { RetourButton } from "../../../components/ui/RetourButton";
 import { formatCurrency } from "../../../lib/utils";
+import { ProtectedAction } from "../../../components/auth/ProtectedAction"; // ✅ ADDED
 
 export default function MissionCACForm() {
   const { id } = useParams();
@@ -222,20 +223,32 @@ export default function MissionCACForm() {
         }
         actions={
           <div className="flex gap-2">
-            <button
-              onClick={handleCalcul}
-              className="btn-secondary btn-md flex items-center gap-2"
+            {/* ✅ WRAPPED: Calculer (edit or create) */}
+            <ProtectedAction
+              module="missions"
+              action={isEdit ? "edit" : "create"}
             >
-              <Calculator className="w-4 h-4" /> Calculer
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="btn-primary btn-md flex items-center gap-2"
+              <button
+                onClick={handleCalcul}
+                className="btn-secondary btn-md flex items-center gap-2"
+              >
+                <Calculator className="w-4 h-4" /> Calculer
+              </button>
+            </ProtectedAction>
+            {/* ✅ WRAPPED: Enregistrer (edit or create) */}
+            <ProtectedAction
+              module="missions"
+              action={isEdit ? "edit" : "create"}
             >
-              <Save className="w-4 h-4" />{" "}
-              {saving ? "Sauvegarde..." : "Enregistrer"}
-            </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="btn-primary btn-md flex items-center gap-2"
+              >
+                <Save className="w-4 h-4" />{" "}
+                {saving ? "Sauvegarde..." : "Enregistrer"}
+              </button>
+            </ProtectedAction>
           </div>
         }
       />

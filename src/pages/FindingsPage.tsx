@@ -1,39 +1,32 @@
 // src/pages/FindingsPage.tsx
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Plus, Edit, Trash2 } from "lucide-react";
 import { PageHeader } from "../components/ui/PageHeader";
 import { DataTable } from "../components/ui/DataTable";
 import { Badge } from "../components/ui/Badge";
 import { EmptyState } from "../components/ui/EmptyState";
-import { useSupabaseQuery } from "../hooks/useSupabaseData";
 import { mapFindingRow } from "../lib/db-mappers";
 import { RISK_LABELS } from "../lib/constants";
 import { cn, formatDate } from "../lib/utils";
 import { supabase } from "../lib/supabase";
-import { addNotification } from "../lib/notifications"; // ⭐ FIX 1: Added import
+import { addNotification } from "../lib/notifications";
 import type { Finding, ColumnDef } from "../types";
+import { ProtectedAction } from "../components/auth/ProtectedAction";
+import { buildAccessFilter } from "../lib/permissions";
+import { useAuth } from "../contexts/AuthContext";
 
-// ⭐ FIX 2: Extended type with concerned_person + index signature
 type FindingExtended = Finding & {
   concerned_person?: string | null;
-  [key: string]: unknown; // ⭐ Allows the type to be used with DataTable
+  [key: string]: unknown;
 };
 
 export function FindingsPage() {
+  const { user, profile } = useAuth();
+  const [data, setData] = useState<FindingExtended[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const [filter, setFilter] = useState("all");
-
-  // ⭐ FIX 3: Use `any` generic to avoid strict type mismatch
-  const {
-    data: rawData,
-    loading,
-    error,
-    refetch,
-  } = useSupabaseQuery<any>({
-    table: "findings",
-    orderBy: "created_at",
-    orderAsc: false,
-  });
-
   const [showModal, setShowModal] = useState(false);
   const [editingFinding, setEditingFinding] = useState<FindingExtended | null>(
     null,
@@ -48,23 +41,70 @@ export function FindingsPage() {
     target_date: "",
   });
 
-  const data = useMemo<FindingExtended[]>(
-    () => (rawData || []).map(mapFindingRow) as FindingExtended[],
-    [rawData],
-  );
+  // ─────────────────────────────────────────────
+  // FETCH with row-level filter
+  // ─────────────────────────────────────────────
+  const refetch = async () => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      const accessFilter = buildAccessFilter({
+        role: profile?.role,
+        module: "findings",
+        currentUserId: user.id,
+        ownerColumn: "created_by",
+        assignmentColumn: "responsible_person",
+      });
 
+      let q = supabase
+        .from("findings")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (accessFilter) q = q.or(accessFilter);
+
+      const { data: rawData, error: fetchError } = await q;
+      if (fetchError) throw fetchError;
+
+      setData((rawData || []).map(mapFindingRow) as FindingExtended[]);
+      setError(null);
+    } catch (err: any) {
+      console.error("Erreur chargement constats:", err);
+      setError(err.message || "Erreur de chargement");
+      setData([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    refetch();
+  }, [user, profile?.role]);
+
+  // ─────────────────────────────────────────────
+  // DERIVED
+  // ─────────────────────────────────────────────
   const filtered =
     filter === "all"
       ? data
       : data.filter((f) => f.status === filter || f.risk_level === filter);
 
-  const riskSummary = {
-    critical: data.filter((f) => f.risk_level === "critical").length,
-    high: data.filter((f) => f.risk_level === "high").length,
-    medium: data.filter((f) => f.risk_level === "medium").length,
-    low: data.filter((f) => f.risk_level === "low").length,
-  };
+  const riskSummary = useMemo(
+    () => ({
+      critical: data.filter((f) => f.risk_level === "critical").length,
+      high: data.filter((f) => f.risk_level === "high").length,
+      medium: data.filter((f) => f.risk_level === "medium").length,
+      low: data.filter((f) => f.risk_level === "low").length,
+    }),
+    [data],
+  );
 
+  // ─────────────────────────────────────────────
+  // HANDLERS
+  // ─────────────────────────────────────────────
   const handleSave = async () => {
     try {
       if (!form.finding.trim()) {
@@ -82,7 +122,7 @@ export function FindingsPage() {
         target_date: form.target_date || null,
         engagement_id: null,
         management_response: null,
-        created_by: null,
+        created_by: user?.id || null,
       };
 
       let result;
@@ -164,7 +204,9 @@ export function FindingsPage() {
     setShowModal(true);
   };
 
-  // ⭐ FIX 4: Use ColumnDef<FindingExtended>[] to match data type
+  // ─────────────────────────────────────────────
+  // TABLE COLUMNS
+  // ─────────────────────────────────────────────
   const columns: ColumnDef<FindingExtended>[] = [
     {
       key: "finding",
@@ -259,36 +301,44 @@ export function FindingsPage() {
       key: "id",
       label: "Actions",
       sortable: false,
-      // ⭐ FIX 5: Prefix unused `value` with underscore
       render: (_value, row) => (
         <div className="flex gap-1">
-          <button
-            onClick={() => openEdit(row)}
-            className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-slate-200"
-          >
-            <Edit className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => handleDelete(row.id)}
-            className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-error-400"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
+          <ProtectedAction module="findings" action="edit">
+            <button
+              onClick={() => openEdit(row)}
+              className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-slate-200"
+            >
+              <Edit className="w-4 h-4" />
+            </button>
+          </ProtectedAction>
+          <ProtectedAction module="findings" action="delete">
+            <button
+              onClick={() => handleDelete(row.id)}
+              className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-error-400"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </ProtectedAction>
         </div>
       ),
     },
   ];
 
+  // ─────────────────────────────────────────────
+  // RENDER
+  // ─────────────────────────────────────────────
   return (
     <div className="page-container">
       <PageHeader
         title="Constats"
         description="Gérez les constats d'audit et les recommandations"
         actions={
-          <button onClick={openCreate} className="btn-primary btn-md">
-            <Plus className="w-4 h-4" />
-            Signaler un constat
-          </button>
+          <ProtectedAction module="findings" action="create">
+            <button onClick={openCreate} className="btn-primary btn-md">
+              <Plus className="w-4 h-4" />
+              Signaler un constat
+            </button>
+          </ProtectedAction>
         }
       />
 
@@ -360,7 +410,6 @@ export function FindingsPage() {
         <DataTable data={filtered} columns={columns} />
       )}
 
-      {/* Modal d’ajout / modification */}
       {showModal && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in"
@@ -485,9 +534,14 @@ export function FindingsPage() {
               </div>
 
               <div className="flex gap-3 pt-2">
-                <button onClick={handleSave} className="btn-primary btn-md">
-                  {editingFinding ? "Mettre à jour" : "Créer"}
-                </button>
+                <ProtectedAction
+                  module="findings"
+                  action={editingFinding ? "edit" : "create"}
+                >
+                  <button onClick={handleSave} className="btn-primary btn-md">
+                    {editingFinding ? "Mettre à jour" : "Créer"}
+                  </button>
+                </ProtectedAction>
                 <button
                   onClick={() => setShowModal(false)}
                   className="btn-secondary btn-md"

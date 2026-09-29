@@ -17,6 +17,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { useCountry } from "../../contexts/CountryContext";
 import { INVOICE_STATUS_CONFIG } from "../../lib/constants";
 import { cn, formatDate } from "../../lib/utils";
+import { ProtectedAction } from "../../components/auth/ProtectedAction"; // ✅ ADDED
 
 type Invoice = {
   id: string;
@@ -26,7 +27,7 @@ type Invoice = {
   total_general: number;
   status: string;
   currency: string;
-  type_document: string; // "FACTURE" | "PRO-FORMA" | "AVOIR"
+  type_document: string;
   client_details_snapshot?: { name?: string };
 };
 
@@ -176,12 +177,6 @@ export default function InvoicesPage() {
     return "Facture";
   };
 
-  const getDocumentBadgeClass = (type: string) => {
-    if (type === "AVOIR") return "bg-amber-700 text-amber-100";
-    if (type === "PRO-FORMA") return "bg-blue-700 text-blue-100";
-    return "bg-slate-700 text-white";
-  };
-
   return (
     <div className="page-container space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -196,13 +191,16 @@ export default function InvoicesPage() {
             Gestion des factures EXCI-MAA · {selectedCountry.name}
           </p>
         </div>
-        <Link
-          to="/factures/new"
-          className="btn-primary inline-flex items-center gap-2"
-        >
-          <Plus size={16} />
-          Nouvelle facture
-        </Link>
+        {/* ✅ WRAPPED: Nouvelle facture */}
+        <ProtectedAction module="factures" action="create">
+          <Link
+            to="/factures/new"
+            className="btn-primary inline-flex items-center gap-2"
+          >
+            <Plus size={16} />
+            Nouvelle facture
+          </Link>
+        </ProtectedAction>
       </div>
 
       {tableMissing && (
@@ -277,13 +275,15 @@ export default function InvoicesPage() {
             <p className="text-sm text-slate-400 mt-1 mb-5">
               Créez votre première facture avec une référence auto-générée.
             </p>
-            <Link
-              to="/factures/new"
-              className="btn-primary inline-flex items-center gap-2"
-            >
-              <Plus size={14} />
-              Créer une facture
-            </Link>
+            <ProtectedAction module="factures" action="create">
+              <Link
+                to="/factures/new"
+                className="btn-primary inline-flex items-center gap-2"
+              >
+                <Plus size={14} />
+                Créer une facture
+              </Link>
+            </ProtectedAction>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -341,35 +341,47 @@ export default function InvoicesPage() {
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center justify-end gap-1">
-                          <Link
-                            to={`/factures/${inv.id}`}
-                            className="p-2 text-slate-300 hover:text-primary-300 hover:bg-primary-500/10 rounded-lg transition-all"
-                            title="Voir"
-                          >
-                            <Eye size={15} />
-                          </Link>
-                          <Link
-                            to={`/factures/${inv.id}?download=1`}
-                            className="p-2 text-slate-300 hover:text-emerald-300 hover:bg-emerald-500/10 rounded-lg transition-all"
-                            title="Télécharger PDF"
-                          >
-                            <Download size={15} />
-                          </Link>
-                          <Link
-                            to={`/factures/${inv.id}/edit`}
-                            className="p-2 text-slate-300 hover:text-violet-300 hover:bg-violet-500/10 rounded-lg transition-all"
-                            title="Modifier"
-                          >
-                            <Edit2 size={15} />
-                          </Link>
-                          <button
-                            type="button"
-                            onClick={() => handleDelete(inv.id)}
-                            className="p-2 text-slate-300 hover:text-rose-300 hover:bg-rose-500/10 rounded-lg transition-all"
-                            title="Supprimer"
-                          >
-                            <Trash2 size={15} />
-                          </button>
+                          {/* ✅ WRAPPED: Voir */}
+                          <ProtectedAction module="factures" action="view">
+                            <Link
+                              to={`/factures/${inv.id}`}
+                              className="p-2 text-slate-300 hover:text-primary-300 hover:bg-primary-500/10 rounded-lg transition-all"
+                              title="Voir"
+                            >
+                              <Eye size={15} />
+                            </Link>
+                          </ProtectedAction>
+                          {/* ✅ WRAPPED: Télécharger PDF (view) */}
+                          <ProtectedAction module="factures" action="view">
+                            <Link
+                              to={`/factures/${inv.id}?download=1`}
+                              className="p-2 text-slate-300 hover:text-emerald-300 hover:bg-emerald-500/10 rounded-lg transition-all"
+                              title="Télécharger PDF"
+                            >
+                              <Download size={15} />
+                            </Link>
+                          </ProtectedAction>
+                          {/* ✅ WRAPPED: Modifier */}
+                          <ProtectedAction module="factures" action="edit">
+                            <Link
+                              to={`/factures/${inv.id}/edit`}
+                              className="p-2 text-slate-300 hover:text-violet-300 hover:bg-violet-500/10 rounded-lg transition-all"
+                              title="Modifier"
+                            >
+                              <Edit2 size={15} />
+                            </Link>
+                          </ProtectedAction>
+                          {/* ✅ WRAPPED: Supprimer */}
+                          <ProtectedAction module="factures" action="delete">
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(inv.id)}
+                              className="p-2 text-slate-300 hover:text-rose-300 hover:bg-rose-500/10 rounded-lg transition-all"
+                              title="Supprimer"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </ProtectedAction>
                         </div>
                       </td>
                     </tr>

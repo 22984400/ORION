@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { supabase } from "../../lib/supabase";
 import {
   Download,
-  Plus, 
+  Plus,
   X,
   FileSpreadsheet,
   CheckSquare,
@@ -11,17 +11,26 @@ import {
 } from "lucide-react";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
+import { useAuth } from "../../contexts/AuthContext"; // ✅ ADDED
+import { buildAccessFilter, hasPermission } from "../../lib/permissions"; // ✅ ADDED
 
 // ============================================================
 // TYPES
 // ============================================================
-// Changed to string to support dynamic tables
 type ModuleId = string;
 
 type ModuleConfig = {
   table: string;
   label: string;
   dateColumn: string;
+  /** ✅ Column that stores the creator's user id (for row-level filtering) */
+  ownerColumn?: string;
+  /** ✅ Column that stores the assignee's user id (for row-level filtering) */
+  assignmentColumn?: string;
+  /** ✅ True if assignmentColumn is a Postgres array (e.g. text[]) */
+  assignmentIsArray?: boolean;
+  /** ✅ Module id used by the permission matrix (if different from key) */
+  permissionModule?: string;
 };
 
 type ModuleState = {
@@ -40,62 +49,115 @@ type CustomReportResult = {
 };
 
 // ============================================================
-// CONFIGURATION (Fallback & Labels)
+// CONFIGURATION
 // ============================================================
 const MODULE_CONFIG: Record<string, ModuleConfig> = {
-  missions: { table: "weekly_missions", label: "Missions", dateColumn: "date" },
+  missions: {
+    table: "weekly_missions",
+    label: "Missions",
+    dateColumn: "date",
+    ownerColumn: "created_by",
+    assignmentColumn: "responsible_id",
+    permissionModule: "missions",
+  },
   review_notes: {
     table: "review_notes",
     label: "Notes de revue",
     dateColumn: "created_at",
+    ownerColumn: "created_by",
+    assignmentColumn: "assigned_to_id",
+    permissionModule: "review_notes",
   },
-  findings: { table: "findings", label: "Constats", dateColumn: "created_at" },
+  findings: {
+    table: "findings",
+    label: "Constats",
+    dateColumn: "created_at",
+    ownerColumn: "created_by",
+    assignmentColumn: "responsible_person",
+    permissionModule: "findings",
+  },
   stock_items: {
     table: "stock_items",
     label: "Stock",
     dateColumn: "created_at",
+    permissionModule: "stock",
   },
   fixed_assets: {
     table: "fixed_assets",
     label: "Immobilisations",
     dateColumn: "created_at",
+    permissionModule: "immobilisations",
   },
   leave_requests: {
     table: "leave_requests",
     label: "Congés",
     dateColumn: "created_at",
+    ownerColumn: "employee_id",
+    permissionModule: "conges",
   },
-  clients: { table: "clients", label: "Clients", dateColumn: "created_at" },
+  clients: {
+    table: "clients",
+    label: "Clients",
+    dateColumn: "created_at",
+    permissionModule: "clients",
+  },
   cac: {
     table: "audit_mission_assignments",
     label: "Suivi CAC",
     dateColumn: "created_at",
+    assignmentColumn: "production_responsible",
+    assignmentIsArray: true,
+    permissionModule: "suivi_cac",
   },
   collaborateurs: {
     table: "collaborateurs",
     label: "Collaborateurs",
     dateColumn: "created_at",
+    ownerColumn: "id",
+    permissionModule: "collaborateurs",
   },
-  factures: { table: "invoices", label: "Factures", dateColumn: "created_at" },
+  factures: {
+    table: "invoices",
+    label: "Factures",
+    dateColumn: "created_at",
+    permissionModule: "factures",
+  },
   notes_de_frais: {
     table: "expenses",
     label: "Notes de frais",
     dateColumn: "created_at",
+    ownerColumn: "user_id",
+    permissionModule: "notes_frais",
   },
   etablissements: {
     table: "etablissements",
     label: "Établissements",
     dateColumn: "created_at",
+    permissionModule: "clients",
   },
   client_documents: {
     table: "client_documents",
     label: "Documents clients",
     dateColumn: "created_at",
+    permissionModule: "clients",
   },
   client_taxes: {
     table: "client_taxes",
     label: "Taxes clients",
     dateColumn: "created_at",
+    permissionModule: "clients",
+  },
+  caisse: {
+    table: "caisse",
+    label: "Caisse",
+    dateColumn: "date_piece",
+    permissionModule: "caisse",
+  },
+  fournisseurs: {
+    table: "fournisseurs",
+    label: "Fournisseurs",
+    dateColumn: "created_at",
+    permissionModule: "fournisseurs",
   },
 };
 
@@ -119,6 +181,10 @@ const formatDateTime = (dateStr: string) => {
 // ============================================================
 export default function ReportsPage() {
   const { t } = useTranslation();
+  const { user, profile } = useAuth(); // ✅ ADDED
+
+  const isSuperAdmin = profile?.role === "super_admin"; // ✅ ADDED
+
   const [activeTab, setActiveTab] = useState<"audit" | "hr" | "custom">(
     "audit",
   );
@@ -142,7 +208,7 @@ export default function ReportsPage() {
   const [customNotes, setCustomNotes] = useState("");
   const [ignoreDates, setIgnoreDates] = useState(false);
 
-  // Dynamic Modules State
+  // Dynamic Modules State — start with all hardcoded modules checked
   const [modules, setModules] = useState<ModuleState[]>(() =>
     MODULE_IDS.map((id) => ({
       id,
@@ -161,11 +227,11 @@ export default function ReportsPage() {
   // Fetch All Tables from Database (Dynamic Modules)
   useEffect(() => {
     fetchAllTables();
-  }, []);
+  }, [profile?.role]);
 
   async function fetchAllTables() {
     try {
-      // Try to fetch all tables in the public schema
+      // Fetch all tables in the public schema
       const { data, error } = await supabase
         .from("information_schema.tables")
         .select("table_name")
@@ -173,11 +239,8 @@ export default function ReportsPage() {
 
       if (error) throw error;
 
-      // Merge with existing configurations to retain labels
-      const mergedConfig = new Map<
-        string,
-        { table: string; label: string; dateColumn: string }
-      >();
+      // Merge with existing configurations to retain labels + filter config
+      const mergedConfig = new Map<string, ModuleConfig>();
       Object.entries(MODULE_CONFIG).forEach(([key, val]) =>
         mergedConfig.set(key, val),
       );
@@ -188,7 +251,6 @@ export default function ReportsPage() {
         if (name.startsWith("_") || name === "schema_migrations") return;
 
         if (!mergedConfig.has(name)) {
-          // Auto-generate a nice label from the table name
           const autoLabel = name
             .replace(/_/g, " ")
             .replace(/\b\w/g, (c) => c.toUpperCase());
@@ -196,31 +258,46 @@ export default function ReportsPage() {
             table: name,
             label: autoLabel,
             dateColumn: "created_at",
+            permissionModule: name, // fall back to table name for permission check
           });
         }
       });
 
-      // Convert to array for module state
-      const dynamicModules: ModuleState[] = Array.from(
-        mergedConfig.entries(),
-      ).map(([id, cfg]) => ({
+      // ✅ Filter modules based on user's permissions
+      //    - super_admin: sees EVERYTHING
+      //    - others: only modules where they have `view` permission
+      const visibleEntries = Array.from(mergedConfig.entries()).filter(
+        ([, cfg]) => {
+          if (isSuperAdmin) return true;
+          const permModule = cfg.permissionModule || cfg.table;
+          return hasPermission({ role: profile?.role }, permModule, "view");
+        },
+      );
+
+      const dynamicModules: ModuleState[] = visibleEntries.map(([id, cfg]) => ({
         id,
         label: cfg.label,
-        checked: false, // Default to unchecked for dynamic lists
+        // super_admin: all checked by default
+        // others: unchecked by default (they choose)
+        checked: isSuperAdmin,
       }));
 
       setModules(dynamicModules);
     } catch (err) {
-      // Fallback: If permission is denied, use the hardcoded list
       console.warn(
         "Unable to fetch all tables, falling back to default list:",
         err,
       );
+      // Fallback: use the hardcoded list, filtered by permission
       setModules(
-        MODULE_IDS.map((id) => ({
+        MODULE_IDS.filter((id) => {
+          if (isSuperAdmin) return true;
+          const permModule = MODULE_CONFIG[id].permissionModule || id;
+          return hasPermission({ role: profile?.role }, permModule, "view");
+        }).map((id) => ({
           id,
           label: MODULE_CONFIG[id].label,
-          checked: true,
+          checked: isSuperAdmin,
         })),
       );
     }
@@ -284,21 +361,43 @@ export default function ReportsPage() {
     setGenerating(true);
     try {
       const results: Partial<Record<ModuleId, any[]>> = {};
+
       for (const moduleId of selectedModules) {
         const config = MODULE_CONFIG[moduleId] || {
           table: moduleId,
           label: moduleId,
           dateColumn: "created_at",
-        }; // Use dynamic config for unknown tables
+          permissionModule: moduleId,
+        };
         const tableName = config.table;
         const dateCol = config.dateColumn;
 
+        // ✅ Row-level filtering
+        //    - super_admin: NO filter → all rows
+        //    - others: only own rows OR assigned rows (if they lack `view`)
+        const accessFilter = buildAccessFilter({
+          role: profile?.role,
+          module: (config.permissionModule || moduleId) as any,
+          currentUserId: user?.id,
+          ownerColumn: config.ownerColumn,
+          assignmentColumn: config.assignmentColumn,
+          assignmentIsArray: config.assignmentIsArray,
+        });
+
         let query = supabase.from(tableName).select("*");
+
+        // Apply row-level filter (null for super_admin → no filter)
+        if (accessFilter) {
+          query = query.or(accessFilter);
+        }
+
+        // Apply date filter (unless user disabled it)
         if (!ignoreDates) {
           query = query
             .gte(dateCol, `${customStartDate}T00:00:00`)
             .lte(dateCol, `${customEndDate}T23:59:59`);
         }
+
         query = query.order(dateCol, { ascending: false });
 
         const { data, error } = await query;
@@ -309,9 +408,12 @@ export default function ReportsPage() {
         }
       }
 
-      // Construire le résumé
+      // Build summary
       const summaryLines = [
         `Rapport personnalisé généré le ${formatDateTime(new Date().toISOString())}.`,
+        isSuperAdmin
+          ? "👑 Rôle : Super Admin (accès total)"
+          : `👤 Rôle : ${profile?.role || "utilisateur"}`,
         ignoreDates
           ? "📅 Période : TOUTES LES DATES"
           : `📅 Période du ${formatDate(customStartDate)} au ${formatDate(customEndDate)}.`,
@@ -344,7 +446,7 @@ export default function ReportsPage() {
     }
   };
 
-  // ---------- EXPORT EXCEL (multi‑feuilles) ----------
+  // ---------- EXPORT EXCEL (multi-feuilles) ----------
   const exportCustomReport = async () => {
     if (!customResult) return;
 
@@ -374,6 +476,14 @@ export default function ReportsPage() {
       periodCell.alignment = { horizontal: "center" };
 
       summarySheet.addRow([]);
+      if (isSuperAdmin) {
+        const roleRow = summarySheet.addRow([
+          "Rôle : Super Admin (accès total à toutes les données)",
+        ]);
+        roleRow.font = { italic: true, color: { argb: "7C3AED" } };
+      }
+      summarySheet.addRow([]);
+
       const recapRow = summarySheet.addRow(["Module", "Enregistrements"]);
       recapRow.font = { bold: true };
       recapRow.getCell(1).fill = {
@@ -534,6 +644,17 @@ export default function ReportsPage() {
           </div>
 
           <div className="space-y-6">
+            {/* ✅ Role banner for super_admin */}
+            {isSuperAdmin && (
+              <div className="flex items-center gap-2 px-4 py-2 bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-700 rounded-lg text-sm text-purple-700 dark:text-purple-300">
+                <span className="text-lg">👑</span>
+                <span>
+                  Vous êtes connecté en tant que <strong>Super Admin</strong> —
+                  vous verrez <strong>toutes les données</strong> du système.
+                </span>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -580,7 +701,7 @@ export default function ReportsPage() {
             <div>
               <div className="flex justify-between items-center mb-2">
                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  {t("reports.modules")}
+                  {t("reports.modules")} ({modules.length})
                 </label>
                 <button
                   onClick={toggleAll}

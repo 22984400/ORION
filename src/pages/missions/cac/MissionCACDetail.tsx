@@ -6,8 +6,9 @@ import { PageHeader } from "../../../components/ui/PageHeader";
 import { Badge } from "../../../components/ui/Badge";
 import { RetourButton } from "../../../components/ui/RetourButton";
 import { formatCurrency } from "../../../lib/utils";
+import { ProtectedAction } from "../../../components/auth/ProtectedAction"; // ✅ ADDED
 
-export default function MissionCACDetail() { 
+export default function MissionCACDetail() {
   const { id } = useParams();
   const [mission, setMission] = useState<any>(null);
   const [intervenants, setIntervenants] = useState<any[]>([]);
@@ -58,7 +59,6 @@ export default function MissionCACDetail() {
 
   return (
     <div className="page-container">
-      {/* RETOUR BUTTON */}
       <RetourButton />
 
       <PageHeader
@@ -66,18 +66,27 @@ export default function MissionCACDetail() {
         description={`Exercice ${mission.exercice}`}
         actions={
           <div className="flex gap-2">
-            <Link
-              to={`/missions/cac/${id}/edit`}
-              className="btn-secondary btn-md flex items-center gap-2"
-            >
-              <Edit2 className="w-4 h-4" /> Modifier
-            </Link>
-            <button className="btn-primary btn-md flex items-center gap-2">
-              <FileText className="w-4 h-4" /> Facture
-            </button>
-            <button className="btn-ghost btn-md flex items-center gap-2">
-              <Printer className="w-4 h-4" /> PDF
-            </button>
+            {/* ✅ WRAPPED: Modifier (edit) */}
+            <ProtectedAction module="missions" action="edit">
+              <Link
+                to={`/missions/cac/${id}/edit`}
+                className="btn-secondary btn-md flex items-center gap-2"
+              >
+                <Edit2 className="w-4 h-4" /> Modifier
+              </Link>
+            </ProtectedAction>
+            {/* ✅ WRAPPED: Facture (create in factures module) */}
+            <ProtectedAction module="factures" action="create">
+              <button className="btn-primary btn-md flex items-center gap-2">
+                <FileText className="w-4 h-4" /> Facture
+              </button>
+            </ProtectedAction>
+            {/* ✅ WRAPPED: PDF (view) */}
+            <ProtectedAction module="missions" action="view">
+              <button className="btn-ghost btn-md flex items-center gap-2">
+                <Printer className="w-4 h-4" /> PDF
+              </button>
+            </ProtectedAction>
           </div>
         }
       />
@@ -212,7 +221,6 @@ export default function MissionCACDetail() {
                 <span>Marge estimée</span>
                 <span>
                   {formatCurrency(mission.marge_estimee || 0)}
-                  {/* FIX APPLIED HERE: Checks for > 0 */}
                   {mission.total_budget > 0 && (
                     <span className="text-xs ml-1">
                       (

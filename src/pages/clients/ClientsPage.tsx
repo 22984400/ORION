@@ -9,6 +9,7 @@ import { PageHeader } from "../../components/ui/PageHeader";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { addNotification } from "../../lib/notifications";
 import { EtablissementsSection } from "./components/EtablissementsSection";
+import { ProtectedAction } from "../../components/auth/ProtectedAction"; // ✅ ADDED
 
 // ==================== CONSTANTS ====================
 const COUNTRIES = [
@@ -421,7 +422,7 @@ export default function ClientsPage() {
       rue: modal.client.rue || "",
       forme_juridique_id: modal.client.forme_juridique_id || null,
       nature_id: modal.client.nature_id || null,
-      nature: modal.client.nature || null, // ✅ denormalized string for filtering
+      nature: modal.client.nature || null,
       obligation_300_salaries: modal.client.obligation_300_salaries || false,
       obligation_consolidee: modal.client.obligation_consolidee || false,
       obligation_ca_18000ke: modal.client.obligation_ca_18000ke || false,
@@ -550,13 +551,16 @@ export default function ClientsPage() {
         title={t("clients.title")}
         description={t("clients.manage")}
         actions={
-          <button
-            onClick={openAdd}
-            className="flex items-center gap-2 px-4 py-2 bg-[#1e3a5f] text-white rounded-xl text-sm font-medium hover:bg-[#2a4f7f] transition-all shadow-sm"
-          >
-            <Plus size={16} />
-            {t("clients.addClient")}
-          </button>
+          // ✅ WRAPPED IN ProtectedAction
+          <ProtectedAction module="clients" action="create">
+            <button
+              onClick={openAdd}
+              className="flex items-center gap-2 px-4 py-2 bg-[#1e3a5f] text-white rounded-xl text-sm font-medium hover:bg-[#2a4f7f] transition-all shadow-sm"
+            >
+              <Plus size={16} />
+              {t("clients.addClient")}
+            </button>
+          </ProtectedAction>
         }
       />
 
@@ -687,20 +691,28 @@ export default function ClientsPage() {
                       </td>
                       <td className="px-6 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={() => openEdit(client)}
-                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                            title="Modifier"
-                          >
-                            <Edit2 size={14} />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(client.id, client.name)}
-                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                            title="Supprimer"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                          {/* ✅ WRAPPED EDIT BUTTON */}
+                          <ProtectedAction module="clients" action="edit">
+                            <button
+                              onClick={() => openEdit(client)}
+                              className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                              title="Modifier"
+                            >
+                              <Edit2 size={14} />
+                            </button>
+                          </ProtectedAction>
+                          {/* ✅ WRAPPED DELETE BUTTON */}
+                          <ProtectedAction module="clients" action="delete">
+                            <button
+                              onClick={() =>
+                                handleDelete(client.id, client.name)
+                              }
+                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                              title="Supprimer"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </ProtectedAction>
                         </div>
                       </td>
                     </tr>
@@ -815,7 +827,6 @@ export default function ClientsPage() {
                           ? Number(e.target.value)
                           : null;
                         updateField("nature_id", id);
-                        // ✅ Also update the denormalized nature string
                         const label = id
                           ? refs.natures.find((n) => n.id === id)?.label
                           : "";
@@ -1022,7 +1033,6 @@ export default function ClientsPage() {
                     </div>
                   </div>
 
-                  {/* Checklist documents juridiques */}
                   <div className="mt-4">
                     <h4 className="font-medium text-sm text-slate-700 mb-2">
                       Documents juridiques
@@ -1158,7 +1168,6 @@ export default function ClientsPage() {
                     Obligation 300 salariés
                   </label>
 
-                  {/* Checklist documents fiscaux */}
                   <div className="mt-4">
                     <h4 className="font-medium text-sm text-slate-700 mb-2">
                       Documents fiscaux
@@ -1205,7 +1214,6 @@ export default function ClientsPage() {
                     </div>
                   </div>
 
-                  {/* Tableau des échéances fiscales */}
                   <div className="mt-4">
                     <h4 className="font-medium text-sm text-slate-700 mb-2">
                       Échéances fiscales 2026
@@ -1503,7 +1511,6 @@ export default function ClientsPage() {
                     Versement 1% CDD
                   </label>
 
-                  {/* Checklist documents sociaux */}
                   <div className="mt-4">
                     <h4 className="font-medium text-sm text-slate-700 mb-2">
                       Documents sociaux
@@ -1571,18 +1578,24 @@ export default function ClientsPage() {
               >
                 Annuler
               </button>
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="flex items-center gap-2 px-4 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#2a4f7f] disabled:opacity-60"
+              {/* ✅ WRAPPED SAVE BUTTON */}
+              <ProtectedAction
+                module="clients"
+                action={modal.client?.id ? "edit" : "create"}
               >
-                {saving ? (
-                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                ) : (
-                  <Check size={16} />
-                )}
-                Enregistrer
-              </button>
+                <button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="flex items-center gap-2 px-4 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#2a4f7f] disabled:opacity-60"
+                >
+                  {saving ? (
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <Check size={16} />
+                  )}
+                  Enregistrer
+                </button>
+              </ProtectedAction>
             </div>
           </div>
         </div>

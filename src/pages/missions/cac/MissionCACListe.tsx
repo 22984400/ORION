@@ -6,6 +6,9 @@ import { PageHeader } from "../../../components/ui/PageHeader";
 import { Badge } from "../../../components/ui/Badge";
 import { RetourButton } from "../../../components/ui/RetourButton";
 import { formatCurrency } from "../../../lib/utils";
+import { ProtectedAction } from "../../../components/auth/ProtectedAction";
+import { buildAccessFilter } from "../../../lib/permissions";
+import { useAuth } from "../../../contexts/AuthContext";
 
 type MissionCAC = {
   id: string;
@@ -22,6 +25,7 @@ type MissionCAC = {
 };
 
 export default function MissionCACListe() {
+  const { user, profile } = useAuth();
   const [missions, setMissions] = useState<MissionCAC[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -29,12 +33,21 @@ export default function MissionCACListe() {
   const [exerciceFilter, setExerciceFilter] = useState("");
 
   useEffect(() => {
-    loadMissions();
-  }, []);
+    if (user) loadMissions();
+  }, [user, profile?.role]);
 
   async function loadMissions() {
+    if (!user) return;
     setLoading(true);
     try {
+      const accessFilter = buildAccessFilter({
+        role: profile?.role,
+        module: "missions",
+        currentUserId: user.id,
+        ownerColumn: "created_by",
+        assignmentColumn: "chef_mission_id",
+      });
+
       let query = supabase
         .from("missions_cac")
         .select(
@@ -54,6 +67,7 @@ export default function MissionCACListe() {
         )
         .order("created_at", { ascending: false });
 
+      if (accessFilter) query = query.or(accessFilter);
       if (statutFilter) query = query.eq("statut", statutFilter);
       if (exerciceFilter) query = query.eq("exercice", exerciceFilter);
       if (search) {
@@ -108,12 +122,14 @@ export default function MissionCACListe() {
         title="Missions CAC"
         description="Gestion des missions de commissariat aux comptes"
         actions={
-          <Link
-            to="/missions/cac/nouveau"
-            className="btn-primary btn-md flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" /> Nouvelle mission
-          </Link>
+          <ProtectedAction module="missions" action="create">
+            <Link
+              to="/missions/cac/nouveau"
+              className="btn-primary btn-md flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" /> Nouvelle mission
+            </Link>
+          </ProtectedAction>
         }
       />
 
@@ -231,21 +247,27 @@ export default function MissionCACListe() {
                     </td>
                     <td className="px-4 py-3 text-center">
                       <div className="flex items-center justify-center gap-1">
-                        <Link
-                          to={`/missions/cac/${mission.id}`}
-                          className="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </Link>
-                        <Link
-                          to={`/missions/cac/${mission.id}/edit`}
-                          className="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </Link>
-                        <button className="p-1.5 text-slate-400 hover:text-green-600 rounded-lg">
-                          <FileText className="w-4 h-4" />
-                        </button>
+                        <ProtectedAction module="missions" action="view">
+                          <Link
+                            to={`/missions/cac/${mission.id}`}
+                            className="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Link>
+                        </ProtectedAction>
+                        <ProtectedAction module="missions" action="edit">
+                          <Link
+                            to={`/missions/cac/${mission.id}/edit`}
+                            className="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </Link>
+                        </ProtectedAction>
+                        <ProtectedAction module="missions" action="create">
+                          <button className="p-1.5 text-slate-400 hover:text-green-600 rounded-lg">
+                            <FileText className="w-4 h-4" />
+                          </button>
+                        </ProtectedAction>
                       </div>
                     </td>
                   </tr>

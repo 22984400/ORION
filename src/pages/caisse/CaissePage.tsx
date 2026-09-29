@@ -17,8 +17,9 @@ import {
   X,
   Printer,
 } from "lucide-react";
+import { ProtectedAction } from "../../components/auth/ProtectedAction"; // ✅ ADDED
 
-// ========== STYLES (Thème bleu EXCI-MAA) ==========
+// ========== STYLES (unchanged) ==========
 const Container = styled.div`
   padding: 24px;
   color: #e2e8f0;
@@ -93,7 +94,7 @@ const RecapWidget = styled.div`
       display: flex;
       align-items: center;
       gap: 8px;
-      color: #4facfe; /* bleu EXCI-MAA */
+      color: #4facfe;
     }
   }
 `;
@@ -103,7 +104,7 @@ const RecapTable = styled.table`
   border-collapse: collapse;
   font-size: 13px;
   th {
-    background: #1e3a5f; /* bleu foncé EXCI-MAA */
+    background: #1e3a5f;
     color: #fff;
     font-weight: 600;
     text-transform: uppercase;
@@ -389,7 +390,6 @@ export const CaissePage: React.FC = () => {
 
   const recapRef = useRef<HTMLDivElement>(null);
 
-  // Charger les données
   const loadData = async () => {
     try {
       setLoading(true);
@@ -410,7 +410,6 @@ export const CaissePage: React.FC = () => {
     loadData();
   }, []);
 
-  // Calcul des données pour le récapitulatif
   const recapData = React.useMemo(() => {
     let solde = 0;
     const rows = pieces.map((p) => {
@@ -420,7 +419,6 @@ export const CaissePage: React.FC = () => {
       const depense = isDepense ? montant : 0;
       solde = solde + recette - depense;
 
-      // Description : motif pour dépense, "Reçu de" pour approvisionnement
       let description = "";
       if (isDepense) {
         description = p.motif || "Dépense";
@@ -545,7 +543,6 @@ export const CaissePage: React.FC = () => {
     }
   };
 
-  // ========== EXPORT PDF (pièce individuelle) ==========
   const exportPDF = async (piece: any) => {
     setExportingId(piece.id);
     try {
@@ -654,7 +651,6 @@ export const CaissePage: React.FC = () => {
     }
   };
 
-  // ========== EXPORT PDF RÉCAPITULATIF ==========
   const exportRecapPDF = async () => {
     if (recapData.rows.length === 0) {
       alert("Aucune donnée à exporter.");
@@ -747,7 +743,6 @@ export const CaissePage: React.FC = () => {
     }
   };
 
-  // ========== RENDU ==========
   const totalDepenses = recapData.totalDepenses;
   const totalRecettes = recapData.totalRecettes;
   const soldeGeneral = recapData.soldeFinal;
@@ -764,7 +759,6 @@ export const CaissePage: React.FC = () => {
         </h1>
       </Header>
 
-      {/* Widgets de synthèse */}
       <StatsGrid>
         <StatCard color="#4facfe">
           <div className="stat-value">{nbPieces}</div>
@@ -791,21 +785,23 @@ export const CaissePage: React.FC = () => {
         </StatCard>
       </StatsGrid>
 
-      {/* Widget récapitulatif */}
       <RecapWidget>
         <div className="widget-header">
           <h3>
             <FileText size={18} />
             Récapitulatif général
           </h3>
-          <Button
-            variant="secondary"
-            onClick={exportRecapPDF}
-            disabled={exportingRecap || recapData.rows.length === 0}
-          >
-            <Printer size={16} />
-            {exportingRecap ? "..." : "Exporter PDF récapitulatif"}
-          </Button>
+          {/* ✅ WRAPPED: Exporter PDF récapitulatif (view) */}
+          <ProtectedAction module="caisse" action="view">
+            <Button
+              variant="secondary"
+              onClick={exportRecapPDF}
+              disabled={exportingRecap || recapData.rows.length === 0}
+            >
+              <Printer size={16} />
+              {exportingRecap ? "..." : "Exporter PDF récapitulatif"}
+            </Button>
+          </ProtectedAction>
         </div>
         {recapData.rows.length === 0 ? (
           <EmptyState>
@@ -879,7 +875,6 @@ export const CaissePage: React.FC = () => {
         )}
       </RecapWidget>
 
-      {/* Sélecteur de type */}
       <TypeSelector>
         <button
           className={type === "DEPENSE" ? "active" : ""}
@@ -1038,14 +1033,16 @@ export const CaissePage: React.FC = () => {
             >
               <X size={16} /> Réinitialiser
             </Button>
-            <Button variant="primary" type="submit" disabled={submitting}>
-              {submitting ? "Enregistrement..." : "Enregistrer"}
-            </Button>
+            {/* ✅ WRAPPED: Enregistrer (create) */}
+            <ProtectedAction module="caisse" action="create">
+              <Button variant="primary" type="submit" disabled={submitting}>
+                {submitting ? "Enregistrement..." : "Enregistrer"}
+              </Button>
+            </ProtectedAction>
           </FormActions>
         </form>
       </FormContainer>
 
-      {/* Liste des pièces */}
       <div
         style={{
           display: "flex",
@@ -1126,22 +1123,28 @@ export const CaissePage: React.FC = () => {
                           justifyContent: "center",
                         }}
                       >
-                        <Button
-                          variant="secondary"
-                          onClick={() => exportPDF(p)}
-                          disabled={exportingId === p.id}
-                          style={{ padding: "4px 10px", fontSize: "11px" }}
-                        >
-                          <Download size={14} />
-                          {exportingId === p.id ? "..." : "PDF"}
-                        </Button>
-                        <Button
-                          variant="danger"
-                          onClick={() => handleDelete(p.id)}
-                          style={{ padding: "4px 10px", fontSize: "11px" }}
-                        >
-                          <X size={14} />
-                        </Button>
+                        {/* ✅ WRAPPED: Export PDF (view) */}
+                        <ProtectedAction module="caisse" action="view">
+                          <Button
+                            variant="secondary"
+                            onClick={() => exportPDF(p)}
+                            disabled={exportingId === p.id}
+                            style={{ padding: "4px 10px", fontSize: "11px" }}
+                          >
+                            <Download size={14} />
+                            {exportingId === p.id ? "..." : "PDF"}
+                          </Button>
+                        </ProtectedAction>
+                        {/* ✅ WRAPPED: Delete */}
+                        <ProtectedAction module="caisse" action="delete">
+                          <Button
+                            variant="danger"
+                            onClick={() => handleDelete(p.id)}
+                            style={{ padding: "4px 10px", fontSize: "11px" }}
+                          >
+                            <X size={14} />
+                          </Button>
+                        </ProtectedAction>
                       </div>
                     </td>
                   </tr>

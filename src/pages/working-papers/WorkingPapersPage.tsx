@@ -16,8 +16,8 @@ import { cn, formatDate, formatNumber } from "../../lib/utils";
 import { addNotification } from "../../lib/notifications";
 import { useSupabaseQuery } from "../../hooks/useSupabaseData";
 import { supabase } from "../../lib/supabase";
+import { ProtectedAction } from "../../components/auth/ProtectedAction"; // ✅ ADDED
 
-// ⭐ Local type (self-contained, no import needed)
 interface WorkingPaper {
   id: string;
   name: string;
@@ -219,13 +219,16 @@ export function WorkingPapersPage() {
         title="Documents de travail"
         description="Classés par catégorie : Administratif, Permanent, Annuel, Fiscal, Social, Audit"
         actions={
-          <button
-            onClick={() => setShowUpload(true)}
-            className="btn-primary btn-md"
-          >
-            <Upload className="w-4 h-4" />
-            Téléverser
-          </button>
+          // ✅ WRAPPED: Téléverser (create)
+          <ProtectedAction module="besoins_cabinet" action="create">
+            <button
+              onClick={() => setShowUpload(true)}
+              className="btn-primary btn-md"
+            >
+              <Upload className="w-4 h-4" />
+              Téléverser
+            </button>
+          </ProtectedAction>
         }
       />
 
@@ -349,7 +352,6 @@ export function WorkingPapersPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        {/* ⭐ FIX: variant ajouté */}
                         <Badge
                           variant="neutral"
                           className={cn("border", categoryColor)}
@@ -388,16 +390,22 @@ export function WorkingPapersPage() {
                               className="p-1.5 rounded hover:bg-slate-700/50"
                             />
                           )}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDelete(paper);
-                            }}
-                            className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-red-400"
-                            title="Supprimer"
+                          {/* ✅ WRAPPED: Delete (delete) */}
+                          <ProtectedAction
+                            module="besoins_cabinet"
+                            action="delete"
                           >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDelete(paper);
+                              }}
+                              className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-red-400"
+                              title="Supprimer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </ProtectedAction>
                         </div>
                       </td>
                     </tr>
@@ -432,7 +440,6 @@ export function WorkingPapersPage() {
                 <h4 className="text-sm font-medium text-slate-100 mb-1 truncate">
                   {paper.name}
                 </h4>
-                {/* ⭐ FIX: variant ajouté */}
                 <Badge
                   variant="neutral"
                   className={cn("border text-xs", categoryColor)}
@@ -450,16 +457,19 @@ export function WorkingPapersPage() {
                     v{paper.version}
                   </span>
                 </div>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDelete(paper);
-                  }}
-                  className="absolute top-2 right-2 p-1.5 rounded-lg bg-slate-800/80 text-slate-400 hover:text-red-400 hover:bg-slate-700/80 opacity-0 group-hover:opacity-100 transition-opacity"
-                  title="Supprimer"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                {/* ✅ WRAPPED: Delete (delete) */}
+                <ProtectedAction module="besoins_cabinet" action="delete">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDelete(paper);
+                    }}
+                    className="absolute top-2 right-2 p-1.5 rounded-lg bg-slate-800/80 text-slate-400 hover:text-red-400 hover:bg-slate-700/80 opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Supprimer"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </ProtectedAction>
               </div>
             );
           })}
@@ -489,7 +499,6 @@ export function WorkingPapersPage() {
             <div className="space-y-3">
               <div>
                 <p className="text-xs text-slate-400">Catégorie</p>
-                {/* ⭐ FIX: variant ajouté */}
                 <Badge
                   variant="neutral"
                   className={cn(
@@ -540,23 +549,28 @@ export function WorkingPapersPage() {
               </div>
               <div className="flex gap-2 mt-4">
                 {selectedPaper.file_path && (
-                  <DocumentLink
-                    filePath={selectedPaper.file_path}
-                    bucket={BUCKET_NAME}
-                    label="Télécharger"
-                    className="btn-primary btn-sm"
-                  />
+                  <ProtectedAction module="besoins_cabinet" action="view">
+                    <DocumentLink
+                      filePath={selectedPaper.file_path}
+                      bucket={BUCKET_NAME}
+                      label="Télécharger"
+                      className="btn-primary btn-sm"
+                    />
+                  </ProtectedAction>
                 )}
-                <button
-                  onClick={() => {
-                    setShowDetail(false);
-                    handleDelete(selectedPaper);
-                  }}
-                  className="btn-danger btn-sm gap-1"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  Supprimer
-                </button>
+                {/* ✅ WRAPPED: Supprimer (delete) */}
+                <ProtectedAction module="besoins_cabinet" action="delete">
+                  <button
+                    onClick={() => {
+                      setShowDetail(false);
+                      handleDelete(selectedPaper);
+                    }}
+                    className="btn-danger btn-sm gap-1"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Supprimer
+                  </button>
+                </ProtectedAction>
               </div>
             </div>
           </div>
@@ -658,13 +672,16 @@ export function WorkingPapersPage() {
                 )}
               </div>
               <div className="flex gap-3 pt-2">
-                <button
-                  onClick={handleUpload}
-                  className="btn-primary btn-md flex-1"
-                  disabled={uploading}
-                >
-                  {uploading ? "Téléversement..." : "Téléverser"}
-                </button>
+                {/* ✅ WRAPPED: Téléverser (create) */}
+                <ProtectedAction module="besoins_cabinet" action="create">
+                  <button
+                    onClick={handleUpload}
+                    className="btn-primary btn-md flex-1"
+                    disabled={uploading}
+                  >
+                    {uploading ? "Téléversement..." : "Téléverser"}
+                  </button>
+                </ProtectedAction>
                 <button
                   onClick={() => setShowUpload(false)}
                   className="btn-secondary btn-md flex-1"

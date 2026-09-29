@@ -8,6 +8,8 @@ import { fr } from "date-fns/locale";
 import { useAuth } from "../../contexts/AuthContext";
 import { DocumentLink } from "../../components/DocumentLink";
 import { DocumentImage } from "../../components/DocumentImage";
+import { ProtectedAction } from "../../components/auth/ProtectedAction";
+import { canAccessRecordSafe } from "../../lib/permissions"; // ✅ ADDED
 
 // ==================== HELPER: SANITIZE FILENAME ====================
 const sanitizeFilename = (name: string) => {
@@ -436,8 +438,17 @@ interface DossierItem {
   document_url?: string | null;
 }
 
+interface DossierCategory {
+  id: string;
+  title: string;
+  icon: string;
+  confidential?: boolean;
+  veryConfidential?: boolean;
+  items: { key: string; label: string }[];
+}
+
 // ==================== DOSSIER STRUCTURE ====================
-const DOSSIER_STRUCTURE = [
+const DOSSIER_STRUCTURE: DossierCategory[] = [
   {
     id: "identification",
     title: "Identification et entrée",
@@ -535,7 +546,7 @@ const DOSSIER_STRUCTURE = [
 
 // ==================== COMPOSANT ====================
 const CollaborateurFiche: React.FC = () => {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const isNew = id === "new" || !id;
@@ -545,6 +556,7 @@ const CollaborateurFiche: React.FC = () => {
   );
   const [scores, setScores] = useState<Score[]>([]);
   const [dossier, setDossier] = useState<Record<string, DossierItem>>({});
+  const [accessDenied, setAccessDenied] = useState(false); // ✅ ADDED
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -566,6 +578,21 @@ const CollaborateurFiche: React.FC = () => {
 
     try {
       setLoading(true);
+      setAccessDenied(false);
+
+      // ✅ ROW-LEVEL ACCESS CHECK
+      const canAccess = canAccessRecordSafe({
+        role: profile?.role,
+        module: "collaborateurs",
+        action: "view",
+        recordOwnerId: id,
+        currentUserId: user.id,
+      });
+
+      if (!canAccess) {
+        setAccessDenied(true);
+        return;
+      }
 
       const { data: collab, error } = await supabase
         .from("collaborateurs")
@@ -607,7 +634,7 @@ const CollaborateurFiche: React.FC = () => {
 
   useEffect(() => {
     loadData();
-  }, [id, user]);
+  }, [id, user, profile?.role]);
 
   // ============ BASIC HANDLERS ============
   const handleChange = (field: keyof Collaborateur, value: any) => {
@@ -878,6 +905,55 @@ const CollaborateurFiche: React.FC = () => {
     );
   }
 
+  // ✅ ACCESS DENIED SCREEN
+  if (accessDenied) {
+    return (
+      <Container>
+        <Header>
+          <HeaderTitle>
+            <i className="fas fa-lock"></i> Accès refusé
+          </HeaderTitle>
+        </Header>
+        <Section>
+          <div
+            style={{
+              textAlign: "center",
+              padding: "40px 20px",
+              color: "#fca5a5",
+            }}
+          >
+            <i
+              className="fas fa-user-lock"
+              style={{ fontSize: "48px", marginBottom: "16px" }}
+            ></i>
+            <h3 style={{ fontSize: "18px", marginBottom: "8px" }}>
+              Vous n'avez pas accès à ce profil
+            </h3>
+            <p style={{ fontSize: "14px", color: "#94a3b8" }}>
+              Votre rôle ne vous permet pas de consulter les informations
+              d'autres collaborateurs.
+            </p>
+            <button
+              onClick={() => navigate("/collaborateurs")}
+              style={{
+                marginTop: "20px",
+                padding: "10px 20px",
+                background: "#4facfe",
+                color: "#fff",
+                border: "none",
+                borderRadius: "6px",
+                cursor: "pointer",
+                fontWeight: "600",
+              }}
+            >
+              <i className="fas fa-arrow-left"></i> Retour à la liste
+            </button>
+          </div>
+        </Section>
+      </Container>
+    );
+  }
+
   return (
     <Container>
       <Header>
@@ -894,9 +970,14 @@ const CollaborateurFiche: React.FC = () => {
           >
             <i className="fas fa-arrow-left"></i> Retour
           </Button>
-          <Button variant="primary" onClick={handleSubmit} disabled={saving}>
-            {saving ? "Sauvegarde..." : "Enregistrer"}
-          </Button>
+          <ProtectedAction
+            module="collaborateurs"
+            action={isNew ? "create" : "edit"}
+          >
+            <Button variant="primary" onClick={handleSubmit} disabled={saving}>
+              {saving ? "Sauvegarde..." : "Enregistrer"}
+            </Button>
+          </ProtectedAction>
         </div>
       </Header>
 
@@ -922,12 +1003,14 @@ const CollaborateurFiche: React.FC = () => {
               )}
             </PhotoPreview>
             <div>
-              <UploadButton
-                type="button"
-                onClick={() => photoInputRef.current?.click()}
-              >
-                <i className="fas fa-upload"></i> Importer une photo
-              </UploadButton>
+              <ProtectedAction module="collaborateur_profiles" action="edit">
+                <UploadButton
+                  type="button"
+                  onClick={() => photoInputRef.current?.click()}
+                >
+                  <i className="fas fa-upload"></i> Importer une photo
+                </UploadButton>
+              </ProtectedAction>
               <FileInput
                 ref={photoInputRef}
                 type="file"
@@ -938,13 +1021,18 @@ const CollaborateurFiche: React.FC = () => {
                 }}
               />
               {collaborateur.photo_url && (
-                <Button
-                  variant="danger"
-                  type="button"
-                  onClick={() => handleChange("photo_url", "")}
+                <ProtectedAction
+                  module="collaborateur_profiles"
+                  action="delete"
                 >
-                  Supprimer
-                </Button>
+                  <Button
+                    variant="danger"
+                    type="button"
+                    onClick={() => handleChange("photo_url", "")}
+                  >
+                    Supprimer
+                  </Button>
+                </ProtectedAction>
               )}
             </div>
           </PhotoSection>
@@ -1130,24 +1218,30 @@ const CollaborateurFiche: React.FC = () => {
 
                     return (
                       <CheckItem key={item.key} $checked={itemState.checked}>
-                        <input
-                          type="checkbox"
-                          checked={itemState.checked}
-                          onChange={() => toggleDossierItem(item.key)}
-                        />
+                        <ProtectedAction
+                          module={
+                            cat.confidential
+                              ? "collaborateur_hr"
+                              : "collaborateur_documents"
+                          }
+                          action="edit"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={itemState.checked}
+                            onChange={() => toggleDossierItem(item.key)}
+                          />
+                        </ProtectedAction>
                         <span className="label">{item.label}</span>
                         <div className="actions">
                           {itemState.document_url ? (
                             <>
-                              {/* Voir */}
                               <DocumentLink
                                 filePath={itemState.document_url}
                                 bucket="documents"
                                 label="Voir"
                                 className="link-icon"
                               />
-
-                              {/* Remplacer */}
                               <input
                                 type="file"
                                 id={replaceInputId}
@@ -1162,28 +1256,46 @@ const CollaborateurFiche: React.FC = () => {
                                   }
                                 }}
                               />
-                              <button
-                                type="button"
-                                className="replace-btn"
-                                onClick={() =>
-                                  document
-                                    .getElementById(replaceInputId)
-                                    ?.click()
+                              <ProtectedAction
+                                module={
+                                  cat.confidential
+                                    ? "collaborateur_hr"
+                                    : "collaborateur_documents"
                                 }
-                                title="Remplacer le document"
+                                action="edit"
                               >
-                                <i className="fas fa-sync-alt"></i> Remplacer
-                              </button>
-
-                              {/* Supprimer */}
-                              <button
-                                type="button"
-                                className="delete-btn-text"
-                                onClick={() => deleteDossierDocument(item.key)}
-                                title="Supprimer ce document"
+                                <button
+                                  type="button"
+                                  className="replace-btn"
+                                  onClick={() =>
+                                    document
+                                      .getElementById(replaceInputId)
+                                      ?.click()
+                                  }
+                                  title="Remplacer le document"
+                                >
+                                  <i className="fas fa-sync-alt"></i> Remplacer
+                                </button>
+                              </ProtectedAction>
+                              <ProtectedAction
+                                module={
+                                  cat.confidential
+                                    ? "collaborateur_hr"
+                                    : "collaborateur_documents"
+                                }
+                                action="delete"
                               >
-                                <i className="fas fa-trash"></i> Supprimer
-                              </button>
+                                <button
+                                  type="button"
+                                  className="delete-btn-text"
+                                  onClick={() =>
+                                    deleteDossierDocument(item.key)
+                                  }
+                                  title="Supprimer ce document"
+                                >
+                                  <i className="fas fa-trash"></i> Supprimer
+                                </button>
+                              </ProtectedAction>
                             </>
                           ) : (
                             <>
@@ -1201,16 +1313,27 @@ const CollaborateurFiche: React.FC = () => {
                                   }
                                 }}
                               />
-                              <button
-                                type="button"
-                                className="upload-btn"
-                                onClick={() =>
-                                  document.getElementById(fileInputId)?.click()
+                              <ProtectedAction
+                                module={
+                                  cat.confidential
+                                    ? "collaborateur_hr"
+                                    : "collaborateur_documents"
                                 }
-                                disabled={isNew}
+                                action="create"
                               >
-                                <i className="fas fa-upload"></i> Joindre
-                              </button>
+                                <button
+                                  type="button"
+                                  className="upload-btn"
+                                  onClick={() =>
+                                    document
+                                      .getElementById(fileInputId)
+                                      ?.click()
+                                  }
+                                  disabled={isNew}
+                                >
+                                  <i className="fas fa-upload"></i> Joindre
+                                </button>
+                              </ProtectedAction>
                             </>
                           )}
                         </div>

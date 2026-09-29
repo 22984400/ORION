@@ -3,8 +3,7 @@ import React, { useEffect, useState } from "react";
 import styled from "styled-components";
 import { supabase } from "../../lib/supabase";
 import { addNotification } from "../../lib/notifications";
-import { format, differenceInDays, addDays } from "date-fns";
-import { fr } from "date-fns/locale";
+import { format, differenceInDays } from "date-fns";
 import {
   Truck,
   Plus,
@@ -12,11 +11,6 @@ import {
   Edit,
   Trash2,
   CheckCircle,
-  AlertCircle,
-  TrendingUp,
-  Users,
-  DollarSign,
-  Clock,
   BarChart3,
   Calendar,
   RefreshCw,
@@ -31,6 +25,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
+import { ProtectedAction } from "../../components/auth/ProtectedAction"; // ✅ ADDED
 
 // ========== STYLES ==========
 const Container = styled.div`
@@ -382,13 +377,13 @@ export const FournisseursPage: React.FC = () => {
       if (shouldAlert && targetDate) {
         const diffDisplay = diff <= 0 ? "dépassée" : `dans ${diff} jour(s)`;
         // 🔔 Envoyer la notification système (toast)
+        // ✅ FIX: removed `duration` — not part of NotificationPayload
         void addNotification({
           title: `⚠️ Alerte fournisseur : ${f.name}`,
           message:
             f.message ||
             `Échéance ${diffDisplay} (${format(targetDate, "dd/MM/yyyy")})`,
           type: "warning",
-          duration: 8000, // 8 secondes pour bien voir
         });
 
         // Mettre à jour last_alert_date pour éviter les doublons du même jour
@@ -574,9 +569,12 @@ export const FournisseursPage: React.FC = () => {
           <Truck size={32} />
           FOURNISSEURS
         </h1>
-        <Button variant="primary" onClick={() => handleOpenModal()}>
-          <Plus size={16} /> Ajouter
-        </Button>
+        {/* ✅ WRAPPED: Ajouter button */}
+        <ProtectedAction module="fournisseurs" action="create">
+          <Button variant="primary" onClick={() => handleOpenModal()}>
+            <Plus size={16} /> Ajouter
+          </Button>
+        </ProtectedAction>
       </Header>
 
       {/* Dashboard */}
@@ -623,7 +621,7 @@ export const FournisseursPage: React.FC = () => {
                 width={100}
               />
               <Tooltip
-                formatter={(value) => `${value.toLocaleString()} FCFA`}
+                formatter={(value) => `${Number(value).toLocaleString()} FCFA`}
               />
               <Bar dataKey="dépenses" fill="#4facfe" radius={[0, 4, 4, 0]}>
                 {chartData.map((_, index) => (
@@ -724,28 +722,37 @@ export const FournisseursPage: React.FC = () => {
                     <td>
                       <ActionGroup>
                         {isActive && (
+                          // ✅ WRAPPED: Mark Done button (edit action)
+                          <ProtectedAction module="fournisseurs" action="edit">
+                            <Button
+                              variant="success"
+                              onClick={() => handleMarkDone(f.id)}
+                              style={{ padding: "4px 10px", fontSize: "11px" }}
+                            >
+                              <CheckCircle size={14} /> Terminé
+                            </Button>
+                          </ProtectedAction>
+                        )}
+                        {/* ✅ WRAPPED: Edit button */}
+                        <ProtectedAction module="fournisseurs" action="edit">
                           <Button
-                            variant="success"
-                            onClick={() => handleMarkDone(f.id)}
+                            variant="secondary"
+                            onClick={() => handleOpenModal(f)}
                             style={{ padding: "4px 10px", fontSize: "11px" }}
                           >
-                            <CheckCircle size={14} /> Terminé
+                            <Edit size={14} />
                           </Button>
-                        )}
-                        <Button
-                          variant="secondary"
-                          onClick={() => handleOpenModal(f)}
-                          style={{ padding: "4px 10px", fontSize: "11px" }}
-                        >
-                          <Edit size={14} />
-                        </Button>
-                        <Button
-                          variant="danger"
-                          onClick={() => handleDelete(f.id)}
-                          style={{ padding: "4px 10px", fontSize: "11px" }}
-                        >
-                          <Trash2 size={14} />
-                        </Button>
+                        </ProtectedAction>
+                        {/* ✅ WRAPPED: Delete button */}
+                        <ProtectedAction module="fournisseurs" action="delete">
+                          <Button
+                            variant="danger"
+                            onClick={() => handleDelete(f.id)}
+                            style={{ padding: "4px 10px", fontSize: "11px" }}
+                          >
+                            <Trash2 size={14} />
+                          </Button>
+                        </ProtectedAction>
                       </ActionGroup>
                     </td>
                   </tr>
@@ -869,9 +876,15 @@ export const FournisseursPage: React.FC = () => {
                 >
                   Annuler
                 </Button>
-                <Button variant="primary" type="submit">
-                  {editingId ? "Mettre à jour" : "Ajouter"}
-                </Button>
+                {/* ✅ WRAPPED: Submit button (create or edit) */}
+                <ProtectedAction
+                  module="fournisseurs"
+                  action={editingId ? "edit" : "create"}
+                >
+                  <Button variant="primary" type="submit">
+                    {editingId ? "Mettre à jour" : "Ajouter"}
+                  </Button>
+                </ProtectedAction>
               </div>
             </form>
           </Modal>

@@ -22,6 +22,8 @@ import { addNotification } from "../../lib/notifications";
 import { LEAVE_TYPE_LABELS } from "../../lib/constants";
 import { useAuth } from "../../contexts/AuthContext";
 import type { LeaveRequest } from "../../types";
+import { ProtectedAction } from "../../components/auth/ProtectedAction";
+import { buildAccessFilter } from "../../lib/permissions";
 
 const BUCKET_NAME = "leave_documents";
 
@@ -45,7 +47,7 @@ function monthsBetween(date1: Date, date2: Date): number {
 }
 
 export function LeavePage() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
 
   const [leaves, setLeaves] = useState<LeaveRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,7 +69,6 @@ export function LeavePage() {
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingFile, setEditingFile] = useState<File | null>(null);
-  // ✅ Fix: renommé `updating` en `_updating` (unused)
   const [, setUpdating] = useState(false);
 
   const [balance, setBalance] = useState<{
@@ -90,20 +91,20 @@ export function LeavePage() {
     setLoadingBalance(true);
     try {
       const year = new Date().getFullYear();
-      const { data: profile, error: profileError } = await supabase
+      const { data: profileData, error: profileError } = await supabase
         .from("profiles")
         .select("hire_date")
         .eq("id", user.id)
         .single();
       if (profileError) throw profileError;
-      if (!profile?.hire_date) {
+      if (!profileData?.hire_date) {
         setBalance(null);
         setHireDate(null);
         setLoadingBalance(false);
         return;
       }
-      setHireDate(profile.hire_date);
-      const hire = new Date(profile.hire_date);
+      setHireDate(profileData.hire_date);
+      const hire = new Date(profileData.hire_date);
       const now = new Date();
       const monthsWorked = monthsBetween(hire, now);
       const totalEarned = monthsWorked * 2;
@@ -189,10 +190,22 @@ export function LeavePage() {
     }
     setLoading(true);
     try {
-      const { data: leavesData, error: leavesError } = await supabase
+      // ✅ Row-level filter: user only sees own leave requests (unless HR/manager)
+      const accessFilter = buildAccessFilter({
+        role: profile?.role,
+        module: "conges",
+        currentUserId: user.id,
+        ownerColumn: "employee_id",
+      });
+
+      let q = supabase
         .from("leave_requests")
         .select("*")
         .order("created_at", { ascending: false });
+
+      if (accessFilter) q = q.or(accessFilter);
+
+      const { data: leavesData, error: leavesError } = await q;
       if (leavesError) throw leavesError;
 
       if (!leavesData || leavesData.length === 0) {
@@ -207,12 +220,12 @@ export function LeavePage() {
       ];
       let profilesMap: Record<string, string> = {};
       if (employeeIds.length > 0) {
-        const { data: profiles, error: profilesError } = await supabase
+        const { data: profilesData, error: profilesError } = await supabase
           .from("profiles")
           .select("id, full_name")
           .in("id", employeeIds);
         if (profilesError) throw profilesError;
-        profilesMap = profiles.reduce(
+        profilesMap = profilesData.reduce(
           (acc, p) => ({ ...acc, [p.id]: p.full_name }),
           {},
         );
@@ -239,9 +252,11 @@ export function LeavePage() {
   }, [user]);
 
   useEffect(() => {
-    fetchLeaves();
-    fetchBalance();
-  }, [user]);
+    if (user) {
+      fetchLeaves();
+      fetchBalance();
+    }
+  }, [user, profile?.role]);
 
   const filtered = leaves.filter(
     (l) => statusFilter === "all" || l.status === statusFilter,
@@ -288,7 +303,6 @@ export function LeavePage() {
       let supportingDocumentPath: string | null = null;
 
       if (file) {
-        // ✅ Fix: fileExt supprimé (unused)
         const fileName = `${Date.now()}_${file.name}`;
         const filePath = `leave_documents/${fileName}`;
         const { error: uploadError } = await supabase.storage
@@ -422,7 +436,6 @@ export function LeavePage() {
       let supportingDocumentPath: string | null = null;
 
       if (editingFile) {
-        // ✅ Fix: fileExt supprimé (unused)
         const fileName = `${Date.now()}_${editingFile.name}`;
         const filePath = `leave_documents/${fileName}`;
         const { error: uploadError } = await supabase.storage
@@ -569,26 +582,28 @@ export function LeavePage() {
         title="Congés"
         description="Gérez vos demandes de congé et suivez votre solde"
         actions={
-          <button
-            onClick={() => {
-              setEditingId(null);
-              setForm({
-                employee_id: user?.id || "",
-                leave_type: "annual",
-                reason: "",
-                start_date: "",
-                end_date: "",
-                duration: 1,
-              });
-              setFile(null);
-              setEditingFile(null);
-              setShowRequest(true);
-            }}
-            className="btn-primary btn-md"
-          >
-            <Plus className="w-4 h-4" />
-            Demander un congé
-          </button>
+          <ProtectedAction module="conges" action="create">
+            <button
+              onClick={() => {
+                setEditingId(null);
+                setForm({
+                  employee_id: user?.id || "",
+                  leave_type: "annual",
+                  reason: "",
+                  start_date: "",
+                  end_date: "",
+                  duration: 1,
+                });
+                setFile(null);
+                setEditingFile(null);
+                setShowRequest(true);
+              }}
+              className="btn-primary btn-md"
+            >
+              <Plus className="w-4 h-4" />
+              Demander un congé
+            </button>
+          </ProtectedAction>
         }
       />
 
@@ -639,13 +654,15 @@ export function LeavePage() {
           </div>
         </div>
         <div className="card p-4 bg-gradient-to-br from-blue-900/20 to-blue-700/10 border-blue-500/30 flex items-center justify-center">
-          <button
-            onClick={() => setShowAddDaysModal(true)}
-            className="text-sm text-blue-300 hover:text-blue-200 flex items-center gap-2 transition-colors"
-          >
-            <Plus size={16} />
-            Ajouter des jours
-          </button>
+          <ProtectedAction module="conges" action="edit">
+            <button
+              onClick={() => setShowAddDaysModal(true)}
+              className="text-sm text-blue-300 hover:text-blue-200 flex items-center gap-2 transition-colors"
+            >
+              <Plus size={16} />
+              Ajouter des jours
+            </button>
+          </ProtectedAction>
         </div>
       </div>
 
@@ -757,7 +774,6 @@ export function LeavePage() {
                   const isOwner = user && leave.employee_id === user.id;
                   const isPending = leave.status === "submitted";
                   const canModify = isOwner && isPending;
-                  // ✅ Fix: canApproveReject supprimé (unused)
 
                   return (
                     <tr
@@ -816,40 +832,48 @@ export function LeavePage() {
                         <div className="flex items-center gap-1">
                           {isPending && canModify && (
                             <>
-                              <button
-                                onClick={() => handleEdit(leave)}
-                                className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-primary-400"
-                                aria-label="Modifier"
-                              >
-                                <Edit2 className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() =>
-                                  handleDelete(leave.id, leave.status)
-                                }
-                                className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-error-400"
-                                aria-label="Supprimer"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
+                              <ProtectedAction module="conges" action="edit">
+                                <button
+                                  onClick={() => handleEdit(leave)}
+                                  className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-primary-400"
+                                  aria-label="Modifier"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </button>
+                              </ProtectedAction>
+                              <ProtectedAction module="conges" action="delete">
+                                <button
+                                  onClick={() =>
+                                    handleDelete(leave.id, leave.status)
+                                  }
+                                  className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-error-400"
+                                  aria-label="Supprimer"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </ProtectedAction>
                             </>
                           )}
                           {isPending && !isOwner && (
                             <>
-                              <button
-                                onClick={() => handleApprove(leave.id)}
-                                className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-success-400"
-                                aria-label="Approuver"
-                              >
-                                <Check className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => handleReject(leave.id)}
-                                className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-error-400"
-                                aria-label="Rejeter"
-                              >
-                                <XIcon className="w-4 h-4" />
-                              </button>
+                              <ProtectedAction module="conges" action="edit">
+                                <button
+                                  onClick={() => handleApprove(leave.id)}
+                                  className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-success-400"
+                                  aria-label="Approuver"
+                                >
+                                  <Check className="w-4 h-4" />
+                                </button>
+                              </ProtectedAction>
+                              <ProtectedAction module="conges" action="edit">
+                                <button
+                                  onClick={() => handleReject(leave.id)}
+                                  className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-error-400"
+                                  aria-label="Rejeter"
+                                >
+                                  <XIcon className="w-4 h-4" />
+                                </button>
+                              </ProtectedAction>
                             </>
                           )}
                           {!isPending && (
@@ -1033,19 +1057,24 @@ export function LeavePage() {
                 )}
               </div>
               <div className="flex gap-3 pt-2">
-                <button
-                  onClick={editingId ? handleUpdate : handleSubmit}
-                  className="btn-primary btn-md flex-1"
-                  disabled={submitting || uploading}
+                <ProtectedAction
+                  module="conges"
+                  action={editingId ? "edit" : "create"}
                 >
-                  {uploading
-                    ? "Téléversement..."
-                    : submitting
-                      ? "Soumission..."
-                      : editingId
-                        ? "Mettre à jour"
-                        : "Soumettre"}
-                </button>
+                  <button
+                    onClick={editingId ? handleUpdate : handleSubmit}
+                    className="btn-primary btn-md flex-1"
+                    disabled={submitting || uploading}
+                  >
+                    {uploading
+                      ? "Téléversement..."
+                      : submitting
+                        ? "Soumission..."
+                        : editingId
+                          ? "Mettre à jour"
+                          : "Soumettre"}
+                  </button>
+                </ProtectedAction>
                 <button
                   onClick={() => {
                     setShowRequest(false);
@@ -1145,12 +1174,14 @@ export function LeavePage() {
               />
             </div>
             <div className="flex gap-3 pt-4">
-              <button
-                onClick={updateHireDate}
-                className="btn-primary btn-md flex-1"
-              >
-                Enregistrer
-              </button>
+              <ProtectedAction module="conges" action="edit">
+                <button
+                  onClick={updateHireDate}
+                  className="btn-primary btn-md flex-1"
+                >
+                  Enregistrer
+                </button>
+              </ProtectedAction>
               <button
                 onClick={() => setShowHireDateModal(false)}
                 className="btn-secondary btn-md"

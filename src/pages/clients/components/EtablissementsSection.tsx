@@ -8,6 +8,7 @@ import {
   ETABLISSEMENT_TYPE_LABELS,
 } from "../../../lib/constants";
 import type { Etablissement, EtablissementFormData } from "../../../types";
+import { ProtectedAction } from "../../../components/auth/ProtectedAction"; // ✅ ADDED
 
 interface Props {
   clientId: string;
@@ -207,13 +208,16 @@ export function EtablissementsSection({
             {etablissements.length > 1 ? "s" : ""}
           </p>
         </div>
-        <button
-          onClick={() => setShowForm(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-        >
-          <Plus size={14} />
-          Ajouter
-        </button>
+        {/* ✅ WRAPPED: Ajouter */}
+        <ProtectedAction module="clients" action="create">
+          <button
+            onClick={() => setShowForm(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+          >
+            <Plus size={14} />
+            Ajouter
+          </button>
+        </ProtectedAction>
       </div>
 
       {etablissements.length === 0 ? (
@@ -256,25 +260,31 @@ export function EtablissementsSection({
                 </div>
               </div>
               <div className="flex items-center gap-1 ml-2">
-                <button
-                  onClick={() => openEdit(etab)}
-                  className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                >
-                  <Edit2 size={14} />
-                </button>
-                <button
-                  onClick={() => handleDelete(etab.id, etab.name)}
-                  className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                >
-                  <Trash2 size={14} />
-                </button>
+                {/* ✅ WRAPPED: Modifier */}
+                <ProtectedAction module="clients" action="edit">
+                  <button
+                    onClick={() => openEdit(etab)}
+                    className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                  >
+                    <Edit2 size={14} />
+                  </button>
+                </ProtectedAction>
+                {/* ✅ WRAPPED: Supprimer */}
+                <ProtectedAction module="clients" action="delete">
+                  <button
+                    onClick={() => handleDelete(etab.id, etab.name)}
+                    className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </ProtectedAction>
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* MODAL – texte en noir explicite */}
+      {/* MODAL */}
       {showForm && (
         <div
           className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
@@ -481,20 +491,26 @@ export function EtablissementsSection({
                 >
                   Annuler
                 </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="flex-1 px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-60"
+                {/* ✅ WRAPPED: Enregistrer */}
+                <ProtectedAction
+                  module="clients"
+                  action={editingId ? "edit" : "create"}
                 >
-                  {saving ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      Sauvegarde...
-                    </span>
-                  ) : (
-                    "Enregistrer"
-                  )}
-                </button>
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="flex-1 px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-60"
+                  >
+                    {saving ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Sauvegarde...
+                      </span>
+                    ) : (
+                      "Enregistrer"
+                    )}
+                  </button>
+                </ProtectedAction>
               </div>
             </form>
           </div>

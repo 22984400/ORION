@@ -7,38 +7,43 @@ interface ProtectedActionProps {
   module: ModuleId;
   action: ActionId;
   children: ReactNode;
+  /**
+   * Optional: What to render if the user doesn't have permission.
+   * By default, it will render the children but intercept clicks to show an alert.
+   */
   fallback?: ReactNode;
   /**
-   * "alert" (default): button stays visible, alert on click if no permission
-   * "hide": button is hidden completely if no permission
+   * "alert" (default) = Render children, show alert on click if not permitted
+   * "hide" = Do not render the children at all if not permitted
    */
   mode?: "alert" | "hide";
 }
 
-const ACTION_LABELS: Record<ActionId, string> = {
-  create: "créer",
-  view: "consulter",
-  edit: "modifier",
-  delete: "supprimer",
+// Bilingual labels for the alert messages
+const MODULE_LABELS: Record<string, { fr: string; en: string }> = {
+  clients: { fr: "Clients", en: "Clients" },
+  missions: { fr: "Missions", en: "Missions" },
+  review_notes: { fr: "Notes de revue", en: "Review Notes" },
+  findings: { fr: "Constats", en: "Findings" },
+  besoins_cabinet: { fr: "Besoins cabinet", en: "Cabinet Needs" },
+  stock: { fr: "Stock", en: "Stock" },
+  immobilisations: { fr: "Immobilisations", en: "Fixed Assets" },
+  caisse: { fr: "Caisse", en: "Cash Register" },
+  suivi_cac: { fr: "Suivi CAC", en: "CAC Follow-up" },
+  conges: { fr: "Congés", en: "Leaves" },
+  manuel: { fr: "Manuel", en: "Manual" },
+  notes_frais: { fr: "Notes de frais", en: "Expense Reports" },
+  fournisseurs: { fr: "Fournisseurs", en: "Suppliers" },
+  ressources_internes: { fr: "Ressources internes", en: "Internal Resources" },
+  collaborateurs: { fr: "Collaborateurs", en: "Collaborators" },
+  factures: { fr: "Factures", en: "Invoices" },
 };
 
-const MODULE_LABELS: Record<string, string> = {
-  clients: "Clients",
-  missions: "Missions",
-  review_notes: "Notes de revue",
-  findings: "Constats",
-  besoins_cabinet: "Besoins cabinet",
-  stock: "Stock",
-  immobilisations: "Immobilisations",
-  caisse: "Caisse",
-  suivi_cac: "Suivi CAC",
-  conges: "Congés",
-  manuel: "Manuel",
-  notes_frais: "Notes de frais",
-  fournisseurs: "Fournisseurs",
-  ressources_internes: "Ressources internes",
-  collaborateurs: "Collaborateurs",
-  factures: "Factures",
+const ACTION_LABELS: Record<ActionId, { fr: string; en: string }> = {
+  create: { fr: "créer", en: "create" },
+  view: { fr: "consulter", en: "view" },
+  edit: { fr: "modifier", en: "edit" },
+  delete: { fr: "supprimer", en: "delete" },
 };
 
 export function ProtectedAction({
@@ -49,18 +54,19 @@ export function ProtectedAction({
   mode = "alert",
 }: ProtectedActionProps) {
   const { can, role } = usePermission();
+  const isAllowed = can(module, action);
 
-  // Permission granted → render children normally
-  if (can(module, action)) {
+  // If the user has permission, render the children normally.
+  if (isAllowed) {
     return <>{children}</>;
   }
 
-  // mode="hide" → don't render the button
+  // If mode is "hide", don't render the children at all.
   if (mode === "hide") {
     return <>{fallback}</>;
   }
 
-  // mode="alert" → keep the button but intercept clicks
+  // mode === "alert" : Keep the button visible, but block the action.
   const isDemo =
     typeof window !== "undefined" &&
     localStorage.getItem("orion_demo_mode") === "true";
@@ -72,51 +78,51 @@ export function ProtectedAction({
     e.preventDefault();
     e.stopPropagation();
 
+    const moduleLabel = MODULE_LABELS[module]?.fr || module;
+    const actionLabel = ACTION_LABELS[action]?.fr || action;
+
+    // Message for Demo Mode
     if (isDemo) {
       alert(
         `🎭 Mode démo actif\n\n` +
-          `Vous ne pouvez pas ${ACTION_LABELS[action]} dans le module "${
-            MODULE_LABELS[module] || module
-          }".\n\n` +
+          `Vous ne pouvez pas ${actionLabel} dans le module "${moduleLabel}".\n\n` +
           `Le mode démo est en lecture seule — les modifications ne sont pas sauvegardées.`,
       );
       return;
     }
 
+    // Message for users without a valid role
     if (hasNoRole) {
       alert(
         `⛔ Accès refusé\n\n` +
-          `Vous devez être associé à un rôle avant de pouvoir ${ACTION_LABELS[action]} dans le module "${
-            MODULE_LABELS[module] || module
-          }".\n\n` +
-          `Contactez votre administrateur ORION pour qu'il vous attribue un rôle.`,
+          `Vous devez être associé à un rôle pour ${actionLabel} dans le module "${moduleLabel}".\n\n` +
+          `Contactez votre administrateur ORION.`,
       );
       return;
     }
 
-    // Has a role but lacks the specific permission
+    // Message for users with a role that lacks the specific permission
     alert(
       `⛔ Permission insuffisante\n\n` +
-        `Votre rôle actuel ne vous permet pas de ${ACTION_LABELS[action]} dans le module "${
-          MODULE_LABELS[module] || module
-        }".\n\n` +
-        `Contactez votre administrateur si vous pensez qu'il s'agit d'une erreur.`,
+        `Votre rôle actuel ne vous permet pas de ${actionLabel} dans le module "${moduleLabel}".\n\n` +
+        `Veuillez contacter votre administrateur si vous pensez qu'il s'agit d'une erreur.`,
     );
   };
 
-  // Clone the child with an onClick that intercepts
-  // Use a wrapper div with pointer-events trick
+  // Render children but block the click at the wrapper level.
+  // The inner div has pointerEvents: "none" so the click is captured by the outer div,
+  // which then shows the alert.
   return (
     <div
       onClickCapture={handleBlockedClick}
       style={{ display: "inline-block", cursor: "not-allowed" }}
-      title={`Non autorisé — vous devez être associé à un rôle`}
+      title={`Non autorisé — Vous n'avez pas la permission de ${ACTION_LABELS[action]?.fr}`}
     >
       <div
         style={{
           pointerEvents: "none",
-          opacity: 0.55,
-          filter: "grayscale(40%)",
+          opacity: 0.6,
+          filter: "grayscale(50%)",
         }}
       >
         {children}

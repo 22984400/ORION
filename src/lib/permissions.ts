@@ -18,7 +18,7 @@ export type RolePermissions = Record<string, ModulePermissions>;
 export type PermissionMatrix = Record<string, RolePermissions>;
 
 // ============================================================
-// MODULES (16)
+// MODULES (16 + 8 collaborator sub-modules)
 // ============================================================
 export const MODULES = [
   "clients",
@@ -37,6 +37,15 @@ export const MODULES = [
   "ressources_internes",
   "collaborateurs",
   "factures",
+  // ✅ Granular collaborator sub-modules
+  "collaborateur_profiles",
+  "collaborateur_hr",
+  "collaborateur_financial",
+  "collaborateur_missions",
+  "collaborateur_leave",
+  "collaborateur_performance",
+  "collaborateur_documents",
+  "collaborateur_audit",
 ] as const;
 
 export const ACTIONS = ["create", "view", "edit", "delete"] as const;
@@ -82,6 +91,14 @@ export const MODULE_LABELS: Record<ModuleId, string> = {
   ressources_internes: "Ressources internes",
   collaborateurs: "Collaborateurs",
   factures: "Factures",
+  collaborateur_profiles: "Profils collaborateurs",
+  collaborateur_hr: "Informations RH",
+  collaborateur_financial: "Informations financières",
+  collaborateur_missions: "Missions collaborateurs",
+  collaborateur_leave: "Congés collaborateurs",
+  collaborateur_performance: "Performance collaborateurs",
+  collaborateur_documents: "Documents collaborateurs",
+  collaborateur_audit: "Informations audit",
 };
 
 export const ACTION_LABELS: Record<ActionId, string> = {
@@ -101,7 +118,7 @@ const NONE = P(false, false, false, false);
 const FULL = P(true, true, true, true);
 
 // ============================================================
-// MATRICE — données issues directement du fichier Excel ORION
+// MATRICE
 // ============================================================
 export const PERMISSION_MATRIX: PermissionMatrix = {
   // ============ Assistant Administratif ============
@@ -122,6 +139,14 @@ export const PERMISSION_MATRIX: PermissionMatrix = {
     ressources_internes: P(true,  true,  true,  false),
     collaborateurs:      P(false, true,  true,  false),
     factures:            P(false, true,  true,  true),
+    collaborateur_profiles:     P(false, true,  false, false),
+    collaborateur_hr:           NONE,
+    collaborateur_financial:    NONE,
+    collaborateur_missions:     P(false, true,  false, false),
+    collaborateur_leave:        NONE,
+    collaborateur_performance:  NONE,
+    collaborateur_documents:    P(true,  true,  true,  false),
+    collaborateur_audit:        NONE,
   },
 
   // ============ RH ============
@@ -142,6 +167,14 @@ export const PERMISSION_MATRIX: PermissionMatrix = {
     ressources_internes: NONE,
     collaborateurs:      FULL,
     factures:            NONE,
+    collaborateur_profiles:     FULL,
+    collaborateur_hr:           FULL,
+    collaborateur_financial:    P(false, true,  false, false),
+    collaborateur_missions:     P(false, true,  false, false),
+    collaborateur_leave:        FULL,
+    collaborateur_performance:  FULL,
+    collaborateur_documents:    FULL,
+    collaborateur_audit:        NONE,
   },
 
   // ============ Responsable Contrôle Interne ============
@@ -162,6 +195,14 @@ export const PERMISSION_MATRIX: PermissionMatrix = {
     ressources_internes: P(false, true,  false, false),
     collaborateurs:      P(false, true,  false, false),
     factures:            NONE,
+    collaborateur_profiles:     P(false, true,  false, false),
+    collaborateur_hr:           P(false, true,  false, false),
+    collaborateur_financial:    NONE,
+    collaborateur_missions:     P(false, true,  false, false),
+    collaborateur_leave:        NONE,
+    collaborateur_performance:  NONE,
+    collaborateur_documents:    NONE,
+    collaborateur_audit:        P(false, true,  false, false),
   },
 
   // ============ Responsable Administratif et Financier ============
@@ -182,6 +223,14 @@ export const PERMISSION_MATRIX: PermissionMatrix = {
     ressources_internes: P(false, true,  false, false),
     collaborateurs:      P(false, true,  false, false),
     factures:            P(true,  true,  false, false),
+    collaborateur_profiles:     P(false, true,  false, false),
+    collaborateur_hr:           NONE,
+    collaborateur_financial:    P(true,  true,  true,  false),
+    collaborateur_missions:     NONE,
+    collaborateur_leave:        NONE,
+    collaborateur_performance:  NONE,
+    collaborateur_documents:    NONE,
+    collaborateur_audit:        NONE,
   },
 
   // ============ Associé Gérant ============
@@ -202,6 +251,14 @@ export const PERMISSION_MATRIX: PermissionMatrix = {
     ressources_internes: P(false, true,  false, false),
     collaborateurs:      P(false, true,  false, false),
     factures:            FULL,
+    collaborateur_profiles:     FULL,
+    collaborateur_hr:           P(false, true,  false, false),
+    collaborateur_financial:    P(false, true,  false, false),
+    collaborateur_missions:     FULL,
+    collaborateur_leave:        P(false, true,  false, false),
+    collaborateur_performance:  P(false, true,  false, false),
+    collaborateur_documents:    FULL,
+    collaborateur_audit:        FULL,
   },
 
   // ============ Directeur du Bureau ============
@@ -222,6 +279,14 @@ export const PERMISSION_MATRIX: PermissionMatrix = {
     ressources_internes: NONE,
     collaborateurs:      P(true,  true,  false, false),
     factures:            FULL,
+    collaborateur_profiles:     FULL,
+    collaborateur_hr:           P(false, true,  false, false),
+    collaborateur_financial:    P(false, true,  false, false),
+    collaborateur_missions:     FULL,
+    collaborateur_leave:        P(false, true,  false, false),
+    collaborateur_performance:  P(false, true,  false, false),
+    collaborateur_documents:    FULL,
+    collaborateur_audit:        FULL,
   },
 
   // ============ Manager ============
@@ -242,6 +307,14 @@ export const PERMISSION_MATRIX: PermissionMatrix = {
     ressources_internes: NONE,
     collaborateurs:      FULL,
     factures:            NONE,
+    collaborateur_profiles:     FULL,
+    collaborateur_hr:           NONE,
+    collaborateur_financial:    NONE,
+    collaborateur_missions:     FULL,
+    collaborateur_leave:        P(true,  true,  true,  false),
+    collaborateur_performance:  P(true,  true,  true,  false),
+    collaborateur_documents:    P(false, true,  false, false),
+    collaborateur_audit:        FULL,
   },
 
   // ============ Chef de Mission ============
@@ -262,6 +335,14 @@ export const PERMISSION_MATRIX: PermissionMatrix = {
     ressources_internes: NONE,
     collaborateurs:      FULL,
     factures:            NONE,
+    collaborateur_profiles:     P(false, true,  false, false),
+    collaborateur_hr:           NONE,
+    collaborateur_financial:    NONE,
+    collaborateur_missions:     P(true,  true,  true,  true),
+    collaborateur_leave:        P(false, true,  false, false),
+    collaborateur_performance:  P(false, true,  false, false),
+    collaborateur_documents:    P(false, true,  false, false),
+    collaborateur_audit:        FULL,
   },
 
   // ============ Superviseur ============
@@ -282,6 +363,14 @@ export const PERMISSION_MATRIX: PermissionMatrix = {
     ressources_internes: NONE,
     collaborateurs:      FULL,
     factures:            NONE,
+    collaborateur_profiles:     P(false, true,  false, false),
+    collaborateur_hr:           NONE,
+    collaborateur_financial:    NONE,
+    collaborateur_missions:     P(true,  true,  true,  false),
+    collaborateur_leave:        P(false, true,  false, false),
+    collaborateur_performance:  P(false, true,  false, false),
+    collaborateur_documents:    P(false, true,  false, false),
+    collaborateur_audit:        FULL,
   },
 
   // ============ Senior Audit ============
@@ -302,6 +391,14 @@ export const PERMISSION_MATRIX: PermissionMatrix = {
     ressources_internes: NONE,
     collaborateurs:      P(false, true,  false, false),
     factures:            NONE,
+    collaborateur_profiles:     P(false, true,  false, false),
+    collaborateur_hr:           NONE,
+    collaborateur_financial:    NONE,
+    collaborateur_missions:     P(false, true,  false, false),
+    collaborateur_leave:        NONE,
+    collaborateur_performance:  NONE,
+    collaborateur_documents:    NONE,
+    collaborateur_audit:        P(false, true,  false, false),
   },
 
   // ============ Senior Expertise ============
@@ -322,6 +419,14 @@ export const PERMISSION_MATRIX: PermissionMatrix = {
     ressources_internes: NONE,
     collaborateurs:      P(false, true,  false, false),
     factures:            NONE,
+    collaborateur_profiles:     P(false, true,  false, false),
+    collaborateur_hr:           NONE,
+    collaborateur_financial:    NONE,
+    collaborateur_missions:     P(false, true,  false, false),
+    collaborateur_leave:        NONE,
+    collaborateur_performance:  NONE,
+    collaborateur_documents:    NONE,
+    collaborateur_audit:        P(false, true,  false, false),
   },
 
   // ============ Junior Audit ============
@@ -342,6 +447,14 @@ export const PERMISSION_MATRIX: PermissionMatrix = {
     ressources_internes: NONE,
     collaborateurs:      P(false, true,  false, false),
     factures:            NONE,
+    collaborateur_profiles:     P(false, true,  false, false),
+    collaborateur_hr:           NONE,
+    collaborateur_financial:    NONE,
+    collaborateur_missions:     P(false, true,  false, false),
+    collaborateur_leave:        NONE,
+    collaborateur_performance:  NONE,
+    collaborateur_documents:    NONE,
+    collaborateur_audit:        P(false, true,  false, false),
   },
 
   // ============ Junior Expertise ============
@@ -362,6 +475,14 @@ export const PERMISSION_MATRIX: PermissionMatrix = {
     ressources_internes: NONE,
     collaborateurs:      P(false, true,  false, false),
     factures:            NONE,
+    collaborateur_profiles:     P(false, true,  false, false),
+    collaborateur_hr:           NONE,
+    collaborateur_financial:    NONE,
+    collaborateur_missions:     P(false, true,  false, false),
+    collaborateur_leave:        NONE,
+    collaborateur_performance:  NONE,
+    collaborateur_documents:    NONE,
+    collaborateur_audit:        P(false, true,  false, false),
   },
 
   // ============ Stagiaires ============
@@ -382,6 +503,14 @@ export const PERMISSION_MATRIX: PermissionMatrix = {
     ressources_internes: NONE,
     collaborateurs:      P(false, true,  false, false),
     factures:            NONE,
+    collaborateur_profiles:     P(false, true,  false, false),
+    collaborateur_hr:           NONE,
+    collaborateur_financial:    NONE,
+    collaborateur_missions:     NONE,
+    collaborateur_leave:        NONE,
+    collaborateur_performance:  NONE,
+    collaborateur_documents:    NONE,
+    collaborateur_audit:        NONE,
   },
 
   // ============ Formateur Senior ============
@@ -402,6 +531,14 @@ export const PERMISSION_MATRIX: PermissionMatrix = {
     ressources_internes: NONE,
     collaborateurs:      P(false, true,  false, false),
     factures:            NONE,
+    collaborateur_profiles:     P(false, true,  false, false),
+    collaborateur_hr:           NONE,
+    collaborateur_financial:    NONE,
+    collaborateur_missions:     NONE,
+    collaborateur_leave:        NONE,
+    collaborateur_performance:  NONE,
+    collaborateur_documents:    NONE,
+    collaborateur_audit:        NONE,
   },
 
   // ============ Formateur Junior ============
@@ -422,11 +559,19 @@ export const PERMISSION_MATRIX: PermissionMatrix = {
     ressources_internes: NONE,
     collaborateurs:      P(false, true,  false, false),
     factures:            NONE,
+    collaborateur_profiles:     P(false, true,  false, false),
+    collaborateur_hr:           NONE,
+    collaborateur_financial:    NONE,
+    collaborateur_missions:     NONE,
+    collaborateur_leave:        NONE,
+    collaborateur_performance:  NONE,
+    collaborateur_documents:    NONE,
+    collaborateur_audit:        NONE,
   },
 };
 
 // ============================================================
-// SUPER ADMIN — SEULE EXCEPTION
+// SUPER ADMIN
 // ============================================================
 export const SUPER_ADMIN_ROLE = "super_admin";
 
@@ -449,25 +594,123 @@ export interface PermissionUser {
   role?: string | null;
 }
 
+let runtimePermissionMatrix: PermissionMatrix | null = null;
+
+export function setRuntimePermissionMatrix(matrix: PermissionMatrix | null) {
+  runtimePermissionMatrix = matrix;
+}
+
+export function getEffectivePermissionMatrix(): PermissionMatrix {
+  return runtimePermissionMatrix ?? PERMISSION_MATRIX;
+}
+
+export function buildDisplayedPermissionsMap(
+  dbRows: Array<{ role?: string; permissions?: unknown }> | null | undefined,
+): PermissionMatrix {
+  const map: PermissionMatrix = {};
+  POSTES.forEach((p) => {
+    map[p] = getPermissionsForRole(p);
+  });
+  (dbRows || []).forEach((row) => {
+    if (!row?.role || row.role === SUPER_ADMIN_ROLE) return;
+    if (row.permissions && typeof row.permissions === "object") {
+      map[row.role] = row.permissions as RolePermissions;
+    }
+  });
+  return map;
+}
+
+function isDemoMode(): boolean {
+  try {
+    return (
+      typeof localStorage !== "undefined" &&
+      localStorage.getItem("orion_demo_mode") === "true"
+    );
+  } catch {
+    return false;
+  }
+}
+
+function cellAllows(
+  matrix: PermissionMatrix,
+  role: string,
+  module: string,
+  action: string,
+): boolean {
+  if (role === SUPER_ADMIN_ROLE) return true;
+  return matrix[role]?.[module]?.[action as PermissionAction] === true;
+}
+
 export function hasPermission(
   user: PermissionUser | null | undefined,
   module: ModuleId | string,
   action: ActionId | string,
 ): boolean {
-  // ⛔ No user → total refusal
   if (!user) return false;
 
-  // ✅ Super Admin → full bypass
   if (user.role === SUPER_ADMIN_ROLE) return true;
 
-  // ⛔ role === "user" → BLOCK EVERYTHING (simple user, no permissions yet)
-  if (user.role === "user") return false;
+  if (isDemoMode()) return action === "view";
 
-  // ⛔ No role → BLOCK EVERYTHING
+  if (user.role === "user") return false;
   if (!user.role || user.role === "") return false;
 
-  // ✅ Otherwise → use the matrix
-  return PERMISSION_MATRIX[user.role]?.[module]?.[action as PermissionAction] === true;
+  return cellAllows(getEffectivePermissionMatrix(), user.role, module, action);
+}
+
+export interface PermissionConflict {
+  role: string;
+  module: ModuleId;
+  action: ActionId;
+  teamPage: boolean;
+  engine: boolean;
+}
+
+export function validateEnforcementAgainstTeamPage(
+  displayed: PermissionMatrix = getEffectivePermissionMatrix(),
+): PermissionConflict[] {
+  const engineMatrix = getEffectivePermissionMatrix();
+  const conflicts: PermissionConflict[] = [];
+  for (const role of POSTES) {
+    for (const module of MODULES) {
+      for (const action of ACTIONS) {
+        const teamPage =
+          role === SUPER_ADMIN_ROLE
+            ? true
+            : displayed[role]?.[module]?.[action] === true;
+        const engine = cellAllows(engineMatrix, role, module, action);
+        if (teamPage !== engine) {
+          conflicts.push({ role, module, action, teamPage, engine });
+        }
+      }
+    }
+  }
+  return conflicts;
+}
+
+export function diffDisplayedAgainstExcelDefaults(
+  displayed: PermissionMatrix,
+): PermissionConflict[] {
+  const diffs: PermissionConflict[] = [];
+  for (const role of POSTES) {
+    if (role === SUPER_ADMIN_ROLE) continue;
+    for (const module of MODULES) {
+      for (const action of ACTIONS) {
+        const excel = PERMISSION_MATRIX[role]?.[module]?.[action] === true;
+        const teamPage = displayed[role]?.[module]?.[action] === true;
+        if (excel !== teamPage) {
+          diffs.push({
+            role,
+            module,
+            action,
+            teamPage,
+            engine: excel,
+          });
+        }
+      }
+    }
+  }
+  return diffs;
 }
 
 export function getPermissionsForRole(role: string): RolePermissions {
@@ -514,3 +757,175 @@ export const NAV_ITEM_MODULE: Record<string, ModuleId> = {
   leave: "conges",
   collaborateurs: "collaborateurs",
 };
+
+export const QUICK_ACTION_PERMISSION: Record<
+  string,
+  { module: ModuleId; action: ActionId }
+> = {
+  "new-engagement": { module: "missions", action: "create" },
+  "new-finding": { module: "findings", action: "create" },
+  "stock-in": { module: "stock", action: "create" },
+  "request-leave": { module: "conges", action: "create" },
+  "upload-paper": { module: "besoins_cabinet", action: "create" },
+  "new-expense": { module: "notes_frais", action: "create" },
+  "new-collaborateur": { module: "collaborateurs", action: "create" },
+  "new-invoice": { module: "factures", action: "create" },
+};
+
+export function writeMethodToAction(method: string): ActionId {
+  if (method === "delete") return "delete";
+  if (method === "update") return "edit";
+  return "create";
+}
+
+export const TABLE_WRITE_MODULE: Record<string, ModuleId> = {
+  clients: "clients",
+  etablissements: "clients",
+  client_documents: "clients",
+  client_taxes: "clients",
+  engagements: "missions",
+  weekly_missions: "missions",
+  missions: "missions",
+  missions_cac: "missions",
+  missions_cac_intervenants: "missions",
+  grille_honoraires: "missions",
+  tarifs_par_grade: "missions",
+  review_notes: "review_notes",
+  findings: "findings",
+  working_papers: "besoins_cabinet",
+  working_documents: "besoins_cabinet",
+  stock_items: "stock",
+  stock_movements: "stock",
+  inventory_items: "stock",
+  fixed_assets: "immobilisations",
+  depreciation_schedules: "immobilisations",
+  caisse: "caisse",
+  audit_tasks: "suivi_cac",
+  audit_mission_assignments: "suivi_cac",
+  leave_requests: "conges",
+  leave_balances: "conges",
+  outils_manuel: "manuel",
+  echeances: "manuel",
+  controles_essentiels_status: "manuel",
+  acceptation_mission: "manuel",
+  questionnaire_ecoute_reponses: "manuel",
+  bouclage_dossier_status: "manuel",
+  periodic_task_statuses: "manuel",
+  actions_cabinet: "manuel",
+  repartition_parametres: "manuel",
+  repartition_lignes: "manuel",
+  intervenants: "manuel",
+  time_entries: "manuel",
+  doc_interne: "manuel",
+  doc_technique: "manuel",
+  archivage: "manuel",
+  documents_client: "manuel",
+  lettres_mission: "manuel",
+  lettres_mission_parametres: "manuel",
+  collaborateurs_cabinet: "manuel",
+  competences_evaluations: "manuel",
+  objectifs_cabinet: "manuel",
+  expense_reports: "notes_frais",
+  expense_lines: "notes_frais",
+  fournisseurs: "fournisseurs",
+  cabinet_resources: "ressources_internes",
+  collaborateurs: "collaborateurs",
+  invoices: "factures",
+  invoice_lines: "factures",
+  dossier_collaborateur: "collaborateur_documents",
+  scores: "collaborateur_performance",
+};
+
+export const RPC_WRITE_PERMISSION: Record<
+  string,
+  { module: ModuleId; action: ActionId }
+> = {
+  calculer_mission_cac: { module: "missions", action: "edit" },
+};
+
+// ============================================================
+// ✅ OWNERSHIP CHECK — used by usePermission().canAccess
+// ============================================================
+export function canAccessRecordSafe(params: {
+  role: string | null | undefined;
+  module: ModuleId;
+  action: ActionId;
+  recordOwnerId?: string | null;
+  currentUserId?: string | null;
+  assignedUserIds?: string[] | null;
+}): boolean {
+  const {
+    role,
+    module,
+    action,
+    recordOwnerId,
+    currentUserId,
+    assignedUserIds,
+  } = params;
+
+  // 1) Role-level check first (uses the matrix)
+  if (!hasPermission({ role }, module, action)) return false;
+
+  // 2) super_admin bypasses ownership
+  if (role === "super_admin") return true;
+
+  // 3) Stagiaire: only own records or records assigned to them
+  if (role === "stagiaires" || role === "stagiaire") {
+    if (recordOwnerId && currentUserId && recordOwnerId === currentUserId) {
+      return true;
+    }
+    if (
+      assignedUserIds &&
+      currentUserId &&
+      assignedUserIds.includes(currentUserId)
+    ) {
+      return true;
+    }
+    return false;
+  }
+
+  // 4) Everyone else with module permission: allowed
+  return true;
+}
+export interface AccessFilterParams {
+  role: string | null | undefined;
+  module: ModuleId;
+  action?: ActionId;
+  currentUserId: string | null | undefined;
+  ownerColumn?: string; // default: "user_id"
+  assignmentColumn?: string; // e.g. "responsible_id", "assigned_to_id"
+  assignmentIsArray?: boolean; // true for text[] columns
+}
+
+export function buildAccessFilter(
+  params: AccessFilterParams,
+): string | null {
+  const {
+    role,
+    module,
+    currentUserId,
+    ownerColumn = "user_id",
+    assignmentColumn,
+    assignmentIsArray = false,
+  } = params;
+
+  // No user → safest: block everything
+  if (!currentUserId) return null;
+
+  // super_admin: no restriction
+  if (role === "super_admin") return null;
+
+  // Role CAN view the module → no restriction
+  if (hasPermission({ role }, module, "view")) return null;
+
+  // Otherwise → restrict to own rows OR assigned rows
+  const ownerClause = `${ownerColumn}.eq.${currentUserId}`;
+
+  if (!assignmentColumn) return ownerClause;
+
+  const assignClause = assignmentIsArray
+    ? `${assignmentColumn}.cs.{${currentUserId}}`
+    : `${assignmentColumn}.eq.${currentUserId}`;
+
+  return `${ownerClause},${assignClause}`;
+}

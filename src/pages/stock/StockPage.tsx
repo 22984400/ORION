@@ -9,6 +9,7 @@ import { fetchStockItems } from "../../lib/db-queries";
 import { addNotification } from "../../lib/notifications";
 import { supabase } from "../../lib/supabase";
 import type { StockItem } from "../../types";
+import { ProtectedAction } from "../../components/auth/ProtectedAction"; // ✅ ADDED
 
 export function StockPage() {
   const { t } = useTranslation();
@@ -68,7 +69,6 @@ export function StockPage() {
   const findItemByName = (name: string) =>
     items.find((i) => i.item_name.toLowerCase() === name.toLowerCase());
 
-  // ----- Création automatique (sans colonnes calculées) -----
   const getOrCreateItem = async (
     name: string,
     unit_cost?: number,
@@ -109,7 +109,6 @@ export function StockPage() {
     return data as StockItem;
   };
 
-  // ----- ENTRÉE -----
   const handleStockIn = async () => {
     if (stockInForm.quantity <= 0) {
       alert(t("errors.generic"));
@@ -126,12 +125,9 @@ export function StockPage() {
         return;
       }
 
-      // Mise à jour du stock
       const updates: any = {
         quantity_purchased: item.quantity_purchased + stockInForm.quantity,
       };
-      // Si un nouveau coût unitaire est fourni, on met à jour (moyenne pondérée ?)
-      // Pour simplifier, on remplace le coût unitaire par la nouvelle valeur.
       if (unitCost && unitCost > 0) {
         updates.unit_cost = unitCost;
       }
@@ -143,7 +139,6 @@ export function StockPage() {
 
       if (updateError) throw updateError;
 
-      // Insertion du mouvement
       const { error: movementError } = await supabase
         .from("stock_movements")
         .insert([
@@ -173,7 +168,6 @@ export function StockPage() {
     }
   };
 
-  // ----- SORTIE -----
   const handleStockOut = async () => {
     if (stockOutForm.quantity <= 0) {
       alert(t("errors.generic"));
@@ -232,7 +226,6 @@ export function StockPage() {
     }
   };
 
-  // ----- ÉDITION -----
   const openEditModal = (item: StockItem) => {
     setEditingItem(item);
     setEditForm({
@@ -273,7 +266,6 @@ export function StockPage() {
     }
   };
 
-  // ----- Autocorrection au blur -----
   const handleBlurItemIn = () => {
     const match = items.find(
       (i) => i.item_name.toLowerCase() === stockInForm.item_name.toLowerCase(),
@@ -292,7 +284,6 @@ export function StockPage() {
     }
   };
 
-  // ----- RENDU TABLEAU AVEC BOUTON ÉDITION -----
   const tableHeaders = [
     "Article",
     "Catégorie",
@@ -311,20 +302,24 @@ export function StockPage() {
         description="Suivez l'inventaire et les mouvements de stock"
         actions={
           <div className="flex gap-2">
-            <button
-              onClick={() => setShowStockIn(true)}
-              className="btn-primary btn-md"
-            >
-              <PackagePlus className="w-4 h-4" />
-              Entrée
-            </button>
-            <button
-              onClick={() => setShowStockOut(true)}
-              className="btn-secondary btn-md"
-            >
-              <PackageMinus className="w-4 h-4" />
-              Sortie
-            </button>
+            <ProtectedAction module="stock" action="create">
+              <button
+                onClick={() => setShowStockIn(true)}
+                className="btn-primary btn-md"
+              >
+                <PackagePlus className="w-4 h-4" />
+                Entrée
+              </button>
+            </ProtectedAction>
+            <ProtectedAction module="stock" action="edit">
+              <button
+                onClick={() => setShowStockOut(true)}
+                className="btn-secondary btn-md"
+              >
+                <PackageMinus className="w-4 h-4" />
+                Sortie
+              </button>
+            </ProtectedAction>
           </div>
         }
       />
@@ -429,12 +424,14 @@ export function StockPage() {
                       </Badge>
                     </td>
                     <td className="px-4 py-3">
-                      <button
-                        onClick={() => openEditModal(item)}
-                        className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-slate-200"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
+                      <ProtectedAction module="stock" action="edit">
+                        <button
+                          onClick={() => openEditModal(item)}
+                          className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-slate-200"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                      </ProtectedAction>
                     </td>
                   </tr>
                 ))}
@@ -444,7 +441,6 @@ export function StockPage() {
         </div>
       )}
 
-      {/* ===== MODAL ENTRÉE ===== */}
       {showStockIn && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
@@ -540,13 +536,15 @@ export function StockPage() {
                 />
               </div>
               <div className="flex gap-3 pt-2">
-                <button
-                  onClick={handleStockIn}
-                  className="btn-primary btn-md flex-1"
-                  disabled={submitting}
-                >
-                  {submitting ? "Traitement..." : "Valider l’entrée"}
-                </button>
+                <ProtectedAction module="stock" action="create">
+                  <button
+                    onClick={handleStockIn}
+                    className="btn-primary btn-md flex-1"
+                    disabled={submitting}
+                  >
+                    {submitting ? "Traitement..." : "Valider l'entrée"}
+                  </button>
+                </ProtectedAction>
                 <button
                   onClick={() => setShowStockIn(false)}
                   className="btn-secondary btn-md"
@@ -559,7 +557,6 @@ export function StockPage() {
         </div>
       )}
 
-      {/* ===== MODAL SORTIE ===== */}
       {showStockOut && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
@@ -652,13 +649,15 @@ export function StockPage() {
                 />
               </div>
               <div className="flex gap-3 pt-2">
-                <button
-                  onClick={handleStockOut}
-                  className="btn-primary btn-md flex-1"
-                  disabled={submitting}
-                >
-                  {submitting ? "Traitement..." : "Valider la sortie"}
-                </button>
+                <ProtectedAction module="stock" action="edit">
+                  <button
+                    onClick={handleStockOut}
+                    className="btn-primary btn-md flex-1"
+                    disabled={submitting}
+                  >
+                    {submitting ? "Traitement..." : "Valider la sortie"}
+                  </button>
+                </ProtectedAction>
                 <button
                   onClick={() => setShowStockOut(false)}
                   className="btn-secondary btn-md"
@@ -671,7 +670,6 @@ export function StockPage() {
         </div>
       )}
 
-      {/* ===== MODAL ÉDITION ===== */}
       {showEditModal && editingItem && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
@@ -738,13 +736,15 @@ export function StockPage() {
                 />
               </div>
               <div className="flex gap-3 pt-2">
-                <button
-                  onClick={handleEditSave}
-                  className="btn-primary btn-md flex-1"
-                  disabled={submitting}
-                >
-                  {submitting ? "Enregistrement..." : "Enregistrer"}
-                </button>
+                <ProtectedAction module="stock" action="edit">
+                  <button
+                    onClick={handleEditSave}
+                    className="btn-primary btn-md flex-1"
+                    disabled={submitting}
+                  >
+                    {submitting ? "Enregistrement..." : "Enregistrer"}
+                  </button>
+                </ProtectedAction>
                 <button
                   onClick={() => setShowEditModal(false)}
                   className="btn-secondary btn-md"

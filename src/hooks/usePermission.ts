@@ -3,11 +3,19 @@ import { useCallback } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import {
   hasPermission,
+  canAccessRecordSafe,
   type ActionId,
   type ModuleId,
 } from "../lib/permissions";
 
-function roleFromAuth(profile: { role?: string | null } | null, user: unknown) {
+/**
+ * Extract role from profile, falling back to Supabase user_metadata.
+ * This makes the hook work even if the profile row hasn't loaded yet.
+ */
+function roleFromAuth(
+  profile: { role?: string | null } | null,
+  user: unknown,
+): string | undefined {
   const metadataRole =
     user &&
     typeof user === "object" &&
@@ -23,6 +31,10 @@ function roleFromAuth(profile: { role?: string | null } | null, user: unknown) {
 export function usePermission() {
   const { profile, user } = useAuth();
   const role = roleFromAuth(profile, user);
+  const currentUserId =
+    user && typeof user === "object" && "id" in user
+      ? String((user as { id?: string }).id ?? "")
+      : null;
 
   const can = useCallback(
     (module: ModuleId, action: ActionId) =>
@@ -30,5 +42,23 @@ export function usePermission() {
     [role],
   );
 
-  return { can, role };
+  /**
+   * Ownership check: use for row-level access (e.g. stagiaire only sees own records).
+   */
+  const canAccess = useCallback(
+    (params: {
+      module: ModuleId;
+      action: ActionId;
+      recordOwnerId?: string | null;
+      assignedUserIds?: string[] | null;
+    }) =>
+      canAccessRecordSafe({
+        role,
+        currentUserId,
+        ...params,
+      }),
+    [role, currentUserId],
+  );
+
+  return { can, canAccess, role, currentUserId };
 }

@@ -7,6 +7,7 @@ import { DocumentLink } from "../../components/DocumentLink";
 import { addNotification } from "../../lib/notifications";
 import { useSupabaseQuery } from "../../hooks/useSupabaseData";
 import { supabase } from "../../lib/supabase";
+import { ProtectedAction } from "../../components/auth/ProtectedAction"; // ✅ ADDED
 
 const BUCKET_NAME = "cabinet-resources";
 
@@ -59,7 +60,6 @@ export function ResourcesPage() {
         .upload(filePath, file);
       if (uploadError) throw uploadError;
 
-      // ⭐ Store PATH
       const payload = {
         title: title.trim(),
         category,
@@ -151,16 +151,19 @@ export function ResourcesPage() {
                 className="input-md flex-1"
                 disabled={uploading}
               />
-              <button
-                onClick={() => {
-                  setCategory("regles");
-                  fileInputRef.current?.click();
-                }}
-                className="btn-primary btn-md"
-                disabled={uploading}
-              >
-                <Upload className="w-4 h-4" />
-              </button>
+              {/* ✅ WRAPPED: Upload button (create) */}
+              <ProtectedAction module="ressources_internes" action="create">
+                <button
+                  onClick={() => {
+                    setCategory("regles");
+                    fileInputRef.current?.click();
+                  }}
+                  className="btn-primary btn-md"
+                  disabled={uploading}
+                >
+                  <Upload className="w-4 h-4" />
+                </button>
+              </ProtectedAction>
             </div>
             <input
               ref={fileInputRef}
@@ -177,13 +180,16 @@ export function ResourcesPage() {
             {file && category === "regles" && (
               <p className="text-xs text-slate-400">
                 📄 {file.name} ({Math.round(file.size / 1024)} Ko) —{" "}
-                <button
-                  onClick={handleUpload}
-                  disabled={uploading}
-                  className="text-primary-400 hover:text-primary-300"
-                >
-                  {uploading ? "Téléversement..." : "Téléverser"}
-                </button>
+                {/* ✅ WRAPPED: Téléverser link */}
+                <ProtectedAction module="ressources_internes" action="create">
+                  <button
+                    onClick={handleUpload}
+                    disabled={uploading}
+                    className="text-primary-400 hover:text-primary-300"
+                  >
+                    {uploading ? "Téléversement..." : "Téléverser"}
+                  </button>
+                </ProtectedAction>
               </p>
             )}
           </div>
@@ -214,13 +220,19 @@ export function ResourcesPage() {
                         className="p-1 rounded hover:bg-slate-700/50"
                       />
                     )}
-                    <button
-                      onClick={() => handleDelete(doc)}
-                      className="p-1 rounded hover:bg-slate-700/50 text-slate-400 hover:text-red-400"
-                      title="Supprimer"
+                    {/* ✅ WRAPPED: Delete (delete) */}
+                    <ProtectedAction
+                      module="ressources_internes"
+                      action="delete"
                     >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                      <button
+                        onClick={() => handleDelete(doc)}
+                        className="p-1 rounded hover:bg-slate-700/50 text-slate-400 hover:text-red-400"
+                        title="Supprimer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </ProtectedAction>
                   </div>
                 </div>
               ))
@@ -250,16 +262,19 @@ export function ResourcesPage() {
                 className="input-md flex-1"
                 disabled={uploading}
               />
-              <button
-                onClick={() => {
-                  setCategory("manuel");
-                  fileInputRef.current?.click();
-                }}
-                className="btn-primary btn-md"
-                disabled={uploading}
-              >
-                <Upload className="w-4 h-4" />
-              </button>
+              {/* ✅ WRAPPED: Upload button (create) */}
+              <ProtectedAction module="ressources_internes" action="create">
+                <button
+                  onClick={() => {
+                    setCategory("manuel");
+                    fileInputRef.current?.click();
+                  }}
+                  className="btn-primary btn-md"
+                  disabled={uploading}
+                >
+                  <Upload className="w-4 h-4" />
+                </button>
+              </ProtectedAction>
             </div>
             <input
               ref={fileInputRef}
@@ -276,13 +291,16 @@ export function ResourcesPage() {
             {file && category === "manuel" && (
               <p className="text-xs text-slate-400">
                 📄 {file.name} ({Math.round(file.size / 1024)} Ko) —{" "}
-                <button
-                  onClick={handleUpload}
-                  disabled={uploading}
-                  className="text-primary-400 hover:text-primary-300"
-                >
-                  {uploading ? "Téléversement..." : "Téléverser"}
-                </button>
+                {/* ✅ WRAPPED: Téléverser link */}
+                <ProtectedAction module="ressources_internes" action="create">
+                  <button
+                    onClick={handleUpload}
+                    disabled={uploading}
+                    className="text-primary-400 hover:text-primary-300"
+                  >
+                    {uploading ? "Téléversement..." : "Téléverser"}
+                  </button>
+                </ProtectedAction>
               </p>
             )}
           </div>
@@ -313,13 +331,19 @@ export function ResourcesPage() {
                         className="p-1 rounded hover:bg-slate-700/50"
                       />
                     )}
-                    <button
-                      onClick={() => handleDelete(doc)}
-                      className="p-1 rounded hover:bg-slate-700/50 text-slate-400 hover:text-red-400"
-                      title="Supprimer"
+                    {/* ✅ WRAPPED: Delete (delete) */}
+                    <ProtectedAction
+                      module="ressources_internes"
+                      action="delete"
                     >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                      <button
+                        onClick={() => handleDelete(doc)}
+                        className="p-1 rounded hover:bg-slate-700/50 text-slate-400 hover:text-red-400"
+                        title="Supprimer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </ProtectedAction>
                   </div>
                 </div>
               ))

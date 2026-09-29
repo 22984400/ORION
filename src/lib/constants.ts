@@ -198,6 +198,7 @@ export const LEAVE_TYPE_LABELS: Record<string, string> = {
   maternity: 'Maternité',
   personal: 'Personnel',
   unpaid: 'Sans solde',
+  permission: 'Permission',
 };
 
 export const USER_ROLE_LABELS: Record<string, string> = {

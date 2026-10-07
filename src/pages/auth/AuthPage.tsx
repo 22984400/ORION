@@ -529,6 +529,18 @@ export function AuthPage() {
         <p className="lg:hidden text-center text-xs text-slate-400 pb-6">
           {t("auth.allRights")}
         </p>
+
+        <footer className="mt-auto px-6 pb-4 text-right text-[10px] leading-relaxed text-slate-400/70 sm:text-xs">
+          <p>
+            Developed by:{" "}
+            <span className="font-semibold">
+              TCHEBE MBIAFEU TRESOR DUPLEX
+            </span>
+          </p>
+          <p className="italic">
+            Software Engineer • IT Manager • Full-Stack Developer
+          </p>
+        </footer>
       </div>
     </div>
   );

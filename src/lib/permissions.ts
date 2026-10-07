@@ -296,7 +296,7 @@ export const PERMISSION_MATRIX: PermissionMatrix = {
     besoins_cabinet:     NONE,
     stock:               NONE,
     immobilisations:     NONE,
-    caisse:              P(true,  true,  true,  false),
+    caisse:              FULL,
     suivi_cac:           NONE,
     conges:              P(true,  false, false, false),
     manuel:              NONE,
